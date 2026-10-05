@@ -5,7 +5,7 @@ A small self-hosted app that answers one operating question at a glance: **"What
 It reads the ARRL Logbook of the World (LoTW) **Award Credit Matrix**, which Dan pastes in, and shows:
 
 - entities never credited;
-- credited entities still missing bands or modes in the operating profile (160–6 m; CW, Phone and Digital by default);
+- credited entities still missing bands or modes in the operating profile (160–6 m with CW, Phone and Digital by default; 2 m and Satellite can be switched on);
 - the full band/mode matrix.
 
 It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker).

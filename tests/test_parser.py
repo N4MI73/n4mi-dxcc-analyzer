@@ -162,3 +162,25 @@ def test_excel_copied_text_with_empty_cells(reference, credits):
     lines += ["\t".join(r) for r in matrix_rows(reference, credits)]
     res = parse_text("\r\n".join(lines))
     assert res.ok, res.errors[:3]
+
+
+
+# --- Callsign from the title line --------------------------------------------
+
+def test_callsign_from_paste(paste):
+    assert parse_text(paste).callsign == "N0CALL"
+
+
+def test_callsign_from_xlsx(reference, credits):
+    assert parse_upload("m.xlsx", render_xlsx(reference, credits)).callsign == "N0CALL"
+
+
+def test_callsign_portable_and_missing(paste):
+    assert parse_text(paste.replace("Test Operator, N0CALL", "Jo Bloggs, VP2E/W1AW")).callsign == "VP2E/W1AW"
+    assert parse_text(paste.replace("Test Operator, N0CALL\r\n", "")).callsign is None
+    assert parse_text(paste.replace("N0CALL", "not a call")).callsign is None
+
+
+def test_callsign_passed_through_validation(paste, reference):
+    from app.validate import validate
+    assert validate(parse_text(paste), reference).callsign == "N0CALL"

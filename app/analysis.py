@@ -17,9 +17,7 @@ Definitions (confirmed by Dan, 2026-10-05, assumption A1):
 from collections import Counter
 from dataclasses import dataclass
 
-from .categories import MATRIX_CATEGORIES, MIXED, TRACKED
-
-TRACKED_SET = frozenset(TRACKED)
+from .categories import MATRIX_CATEGORIES, MIXED
 
 
 def totals(credits):
@@ -90,19 +88,23 @@ class Changes:
     lost: list             # (dxcc, category) present before, absent now
 
 
-def changes(old, new):
-    """What changed between two snapshots' credits (old may be None)."""
+def changes(old, new, profile=None):
+    """What changed between two snapshots' credits (old may be None).
+
+    With a profile, only Mixed and the profile's categories are reported
+    (so Satellite or 2 m appear only for someone who tracks them).
+    """
+    keep = frozenset(MATRIX_CATEGORIES if profile is None else (MIXED,) + profile.slot_categories)
     old = old or {}
     new_entities, new_slots, lost = [], [], []
     for dxcc in sorted(set(old) | set(new)):
         before, after = old.get(dxcc, frozenset()), new.get(dxcc, frozenset())
         if MIXED in after and MIXED not in before:
             new_entities.append(dxcc)
-        # Satellite is not a tracked category (D11), so it never appears here.
-        for cat in sorted((after - before) & TRACKED_SET):
+        for cat in sorted((after - before) & keep):
             if cat != MIXED:
                 new_slots.append((dxcc, cat))
-        for cat in sorted((before - after) & TRACKED_SET):
+        for cat in sorted((before - after) & keep):
             lost.append((dxcc, cat))
     return Changes(new_entities, new_slots, lost)
 

@@ -33,7 +33,7 @@ def test_parse(credits):
 def test_reconciles(credits):
     res = compare(parse_status(status_text(credits)), credits, [], DEFAULT_PROFILE)
     assert res.reconciled
-    assert res.not_checked == ["70CM", "CHALLENGE"]
+    assert res.not_checked == ["70CM", "CHALLENGE", "SAT"]     # no Satellite row listed
     assert len(res.reconciliation) == 15            # Mixed, CW, Phone, Digital, 160-2 m
 
 
@@ -95,3 +95,25 @@ def test_compare_refuses_incomplete_parse(credits):
 def test_unicode_digits_rejected_cleanly(credits):
     text = status_text(credits).replace("Mixed *\t0", "Mixed *\t³")
     assert any("Mixed" in e for e in parse_status(text).errors)
+
+
+def test_satellite_row_reconciled_when_listed(credits):
+    from app.categories import SAT, Profile
+    sat_credits = dict(credits)
+    sat_credits[1] = credits[1] | {SAT}
+    text = status_text(sat_credits) + "\r\nSatellite\t1\t0\t1\t2\t2"
+    st = parse_status(text)
+    assert st.ok and st.rows[SAT].awarded == 1 and st.rows[SAT].pending == 1
+    with_sat = Profile(modes=(CW, PHONE, DIGITAL, SAT))
+    res = compare(st, sat_credits, [Mark(3, SAT, AWAITING)], with_sat)
+    assert any(x.category == SAT and x.ok for x in res.reconciliation)
+    assert any(x.category == SAT and x.ok for x in res.pending)
+    assert SAT not in res.not_checked
+
+
+def test_satellite_in_profile_but_not_listed_is_skipped(credits):
+    from app.categories import SAT, Profile
+    with_sat = Profile(modes=(CW, PHONE, DIGITAL, SAT))
+    res = compare(parse_status(status_text(credits)), credits, [], with_sat)
+    assert SAT not in {x.category for x in res.pending}
+    assert SAT in res.not_checked

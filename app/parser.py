@@ -17,6 +17,10 @@ Accepted inputs (all reduce to the same list of cell rows):
         Prefix, Entity, Deleted, Mix, Ph, ... 2
     followed by a "(Sorted by) / (Sort by)" row.
 
+The account's callsign is taken from the "Name, Callsign" title line
+(e.g. "Allen Marshall, N4MI"), so the app shows whose data it is without
+hard-coding anyone's call. Only the callsign is kept, never the name.
+
 Rules (strict on purpose — a credit landing in the wrong column would be
 worse than a rejected paste):
   * The header's credit columns must read exactly Deleted, Mix, Ph, CW, RT,
@@ -28,6 +32,7 @@ worse than a rejected paste):
 
 import csv
 import io
+import re
 from dataclasses import dataclass, field
 
 from .categories import MATRIX_COLUMNS
@@ -35,6 +40,7 @@ from .categories import MATRIX_COLUMNS
 EXPECTED_HEADER = ("deleted",) + tuple(label.lower() for label, _ in MATRIX_COLUMNS)
 ROW_FIELDS = 3 + len(MATRIX_COLUMNS)          # prefix, entity, deleted, 16 cells
 SORT_LABELS = {"(sorted by)", "(sort by)"}
+CALLSIGN = re.compile(r"^(?=.*[0-9])(?=.*[A-Z])[A-Z0-9/]{3,15}$")
 MAX_ERRORS = 20
 
 
@@ -51,6 +57,7 @@ class MatrixRow:
 class ParseResult:
     rows: list = field(default_factory=list)
     errors: list = field(default_factory=list)
+    callsign: str | None = None      # from the "Name, Callsign" title line, if found
 
     @property
     def ok(self):
@@ -92,6 +99,15 @@ def _header_index(cells):
     return None
 
 
+def _callsign_from_title(cells):
+    """'Allen Marshall, N4MI' -> 'N4MI'; anything else -> None."""
+    text = " ".join(c for c in cells if c)
+    if "," not in text:
+        return None
+    candidate = text.rsplit(",", 1)[1].strip().upper()
+    return candidate if CALLSIGN.match(candidate) else None
+
+
 def _looks_like_header_attempt(cells):
     low = {c.lower() for c in cells}
     return "deleted" in low and "mix" in low
@@ -111,6 +127,9 @@ def parse_cells(cell_rows):
                     result.errors.append(f"Line {line}: the header columns are not where expected.")
                     return result
                 header_found = True
+            elif result.callsign is None and _callsign_from_title(cells):
+                result.callsign = _callsign_from_title(cells)
+                continue
             elif _looks_like_header_attempt(cells):
                 result.errors.append(
                     f"Line {line}: the column headings do not match the LoTW matrix "

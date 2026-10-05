@@ -84,17 +84,30 @@ def test_profile_normalises_and_rejects_unknown():
         raise AssertionError("expected ValueError")
 
 
-def test_changes_ignore_satellite():
+def test_changes_follow_profile():
     old = {1: frozenset({MIXED, SAT})}
-    new = {1: frozenset({MIXED, "20M"})}
-    ch = changes(old, new)
+    new = {1: frozenset({MIXED, "20M", "2M"})}
+    ch = changes(old, new, DEFAULT_PROFILE)                  # Satellite and 2 m not tracked
     assert ch.lost == [] and ch.new_slots == [(1, "20M")]
+    with_sat = Profile(modes=(CW, PHONE, "DIGITAL", SAT), bands=DEFAULT_PROFILE.bands + ("2M",))
+    ch = changes(old, new, with_sat)
+    assert ch.lost == [(1, SAT)] and ch.new_slots == [(1, "20M"), (1, "2M")]
+    assert changes(old, new).lost == [(1, SAT)]              # no profile: everything
 
 
-def test_sat_loss_does_not_hold(reference, credits):
+def test_sat_loss_holds_regardless_of_profile(reference, credits):
     from app.parser import parse_text
-    from app.validate import CLEAN, validate
+    from app.validate import HELD, validate
     from conftest import render_paste
     before = dict(credits)
     before[1] = credits[1] | {SAT}
-    assert validate(parse_text(render_paste(reference, credits)), reference, before).status == CLEAN
+    res = validate(parse_text(render_paste(reference, credits)), reference, before)
+    assert res.status == HELD and any("Satellite" in w for w in res.warnings)
+
+
+def test_satellite_profile_option(reference):
+    assert SAT not in DEFAULT_PROFILE.slot_categories
+    with_sat = Profile(modes=(CW, PHONE, "DIGITAL", SAT))
+    assert with_sat.modes == (CW, PHONE, "DIGITAL", SAT)
+    need = needed_slots({1: frozenset({MIXED, CW, PHONE})}, reference, with_sat)[1]
+    assert SAT in need and "DIGITAL" in need

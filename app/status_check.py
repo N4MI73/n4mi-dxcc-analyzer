@@ -22,17 +22,23 @@ Two checks against the current snapshot:
      + won't submit, since LoTW keeps listing a QSL Dan won't submit).
      Assumption A3, confirmed by Dan 2026-10-05.
 
-Not checkable from the matrix: 70 cm (no matrix column), Challenge, Satellite.
+Satellite is reconciled when LoTW lists a Satellite row. LoTW appears to
+omit the row for an account with no Satellite activity (Dan's table has
+none), so a missing Satellite row is reported as "not checked", never as
+an error.
+
+Not checkable from the matrix: 70 cm (no matrix column) and Challenge.
 """
 
 import re
 from dataclasses import dataclass, field
 
 from .analysis import totals
-from .categories import BANDS, CW, DIGITAL, LABELS, MIXED, PHONE, TRACKED
+from .categories import BANDS, CW, DIGITAL, LABELS, MIXED, PHONE, SAT, TRACKED
 from .marks import counts_by_category
 
 AWARD_NAMES = {"MIXED": MIXED, "CW": CW, "PHONE": PHONE, "DIGITAL": DIGITAL,
+               "SATELLITE": SAT, "SAT": SAT,
                **{b: b for b in BANDS}, "70CM": "70CM", "CHALLENGE": "CHALLENGE"}
 NOT_CHECKED = ("70CM", "CHALLENGE")
 
@@ -139,8 +145,12 @@ def compare(status, credits, marks, profile):
     if not status.ok:
         raise ValueError("compare() needs a successfully parsed Account Status table.")
     app = totals(credits)
-    recon = [Line(c, app.get(c, 0), status.rows[c].awarded) for c in TRACKED]
+    recon_cats = TRACKED + ((SAT,) if SAT in status.rows else ())
+    recon = [Line(c, app.get(c, 0), status.rows[c].awarded) for c in recon_cats]
     mark_counts = counts_by_category(marks)
     pending = [Line(c, mark_counts.get(c, 0), status.rows[c].pending)
-               for c in profile.markable_categories]
-    return CheckResult(recon, pending, [c for c in NOT_CHECKED if c in status.rows])
+               for c in profile.markable_categories if c in status.rows]
+    not_checked = [c for c in NOT_CHECKED if c in status.rows]
+    if SAT not in status.rows:
+        not_checked.append(SAT)
+    return CheckResult(recon, pending, not_checked)

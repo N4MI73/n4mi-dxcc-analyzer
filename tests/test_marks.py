@@ -44,3 +44,9 @@ def test_marks_clear_when_credited():
 def test_counts_include_wont_submit():
     marks = [Mark(1, "PHONE", AWAITING), Mark(2, "PHONE", WONT_SUBMIT), Mark(3, CW, AWAITING)]
     assert counts_by_category(marks) == {"PHONE": 2, CW: 1}
+
+
+def test_satellite_markable_only_when_in_profile(reference):
+    with_sat = Profile(modes=("CW", "PHONE", "DIGITAL", SAT))
+    assert check_mark(Mark(1, SAT, AWAITING), {}, reference, DEFAULT_PROFILE)
+    assert check_mark(Mark(1, SAT, AWAITING), {}, reference, with_sat) is None

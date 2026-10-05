@@ -16,14 +16,15 @@ Three outcomes (Phase 1 spec, section 5.3):
 Deleted entities are checked against the reference table and then dropped:
 they never appear in credits, counts or views.
 
-Satellite credits are stored but are not a tracked category (D11), so a
-change in Satellite never holds an import.
+The hold rules cover every credit in the matrix, Satellite and 2 m
+included, whatever the operating profile: a credit going down is suspicious
+no matter who tracks it.
 """
 
 from dataclasses import dataclass, field
 
 from .analysis import totals
-from .categories import LABELS, MIXED, TRACKED
+from .categories import LABELS, MATRIX_CATEGORIES, MIXED
 
 REJECTED, HELD, CLEAN = "rejected", "held", "clean"
 
@@ -36,6 +37,7 @@ class ValidationResult:
     credits: dict = field(default_factory=dict)    # dxcc -> frozenset(categories), current only
     totals: dict = field(default_factory=dict)
     rows_read: int = 0
+    callsign: str | None = None
 
 
 def _names(reference, dxccs, limit=8):
@@ -50,7 +52,7 @@ def validate(parsed, reference, current=None):
     `current` is the current snapshot's credits ({dxcc: frozenset}) or None
     on the first import.
     """
-    res = ValidationResult(status=CLEAN, rows_read=len(parsed.rows))
+    res = ValidationResult(status=CLEAN, rows_read=len(parsed.rows), callsign=parsed.callsign)
     res.errors.extend(parsed.errors)
     if not parsed.rows and not parsed.errors:
         res.errors.append("No entity rows found. Nothing was imported.")
@@ -102,13 +104,13 @@ def validate(parsed, reference, current=None):
 
     if current is not None:
         old_totals = totals(current)
-        for cat in TRACKED:
+        for cat in MATRIX_CATEGORIES:
             if res.totals.get(cat, 0) < old_totals.get(cat, 0):
                 res.warnings.append(
                     f"{LABELS[cat]} credits went down from {old_totals[cat]} to "
                     f"{res.totals.get(cat, 0)}.")
         lost = sorted(d for d, cats in current.items()
-                      if (cats - credits.get(d, frozenset())) & set(TRACKED))
+                      if cats - credits.get(d, frozenset()))
         if lost:
             res.warnings.append(f"These entities lost a credit: {_names(reference, lost)}.")
 
