@@ -1,0 +1,39 @@
+# Runtime data — the SQLite database (repo-root data/ folder). Never commit.
+# (app/data/ holds the public DXCC reference table and IS committed.)
+/data/
+*.db
+*.db-journal
+*.sqlite
+
+# Real LoTW exports, pastes and downloads must never be committed.
+# Test data lives in tests/ and is synthetic.
+*.adi
+*.adif
+/*.txt
+!/requirements*.txt
+/*.csv
+/*.xlsx
+local/
+
+# Secrets
+.env
+.env.*
+stack.env
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
