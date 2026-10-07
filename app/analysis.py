@@ -8,8 +8,9 @@ profile never needs a re-import.
 
 Definitions (confirmed by Dan, 2026-10-05, assumption A1):
   * Missing entity: a current entity with no Mixed credit. In LoTW's data
-    Mixed is credited exactly when any category is, so this means "never
-    credited". The profile does not affect this list.
+    Mixed is credited exactly when any non-satellite category is, so this
+    means "never credited" (Satellite DXCC is a separate award, D43). The
+    profile does not affect this list.
   * Needed slot: for an entity that has a Mixed credit, any profile band or
     mode without a credit.
 """

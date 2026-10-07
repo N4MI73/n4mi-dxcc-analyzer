@@ -24,7 +24,7 @@ no matter who tracks it.
 from dataclasses import dataclass, field
 
 from .analysis import totals
-from .categories import LABELS, MATRIX_CATEGORIES, MIXED
+from .categories import LABELS, MATRIX_CATEGORIES, MIXED, SAT
 
 REJECTED, HELD, CLEAN = "rejected", "held", "clean"
 
@@ -96,7 +96,9 @@ def validate(parsed, reference, current=None):
     res.totals = totals(credits)
 
     # --- Hold rules -------------------------------------------------------
-    no_mixed = [d for d, c in credits.items() if MIXED not in c]
+    # Satellite DXCC is a separate award (D43): an entity credited only via
+    # satellite legitimately has no Mixed credit, so Satellite is ignored here.
+    no_mixed = [d for d, c in credits.items() if MIXED not in c and c - {SAT}]
     if no_mixed:
         res.warnings.append(
             "Mixed is blank for entities that have other credits, which LoTW does not "

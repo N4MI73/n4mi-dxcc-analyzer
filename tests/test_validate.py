@@ -86,3 +86,13 @@ def test_mixed_blank_with_other_credits_is_held(reference, credits):
 def test_identical_reimport_is_clean(paste, reference, credits):
     assert run(paste, reference, current=credits).status == CLEAN
     assert MIXED in run(paste, reference).credits[1]
+
+
+def test_satellite_only_entity_is_not_held(reference, credits):
+    # Satellite DXCC is separate (D43): Mixed stays blank for a satellite-only credit.
+    from app.categories import SAT
+    sat_only = dict(credits)
+    missing = next(e.dxcc for e in reference.current if e.dxcc not in credits)
+    sat_only[missing] = frozenset({SAT})
+    res = run(render_paste(reference, sat_only), reference)
+    assert res.status == CLEAN, res.warnings
