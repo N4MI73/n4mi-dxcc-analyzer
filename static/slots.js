@@ -2,7 +2,7 @@
 // its chase list (credited entities still needing that slot), by continent.
 'use strict';
 
-const state = { data: null, sel: null, sort: 'fewest', group: 'continent', hideMarked: false };
+const state = { data: null, marks: [], sel: null, sort: 'fewest', group: 'continent', hideMarked: false };
 
 const byName = (a, b) => a.name.localeCompare(b.name);
 const rankKey = (e, easiest) => (e.mw_rank == null ? 1e6 : easiest ? -e.mw_rank : e.mw_rank);
@@ -33,7 +33,7 @@ function render() {
     // Satellite is a separate award, so "other needs" (band/mode slots) don't apply.
     const others = isSat ? '' : e.slots_needed <= 1 ? '<span class="ot" title="This is its last missing slot">Done</span>'
       : `<span class="ot" title="Other slots this entity still needs in your profile">+${e.slots_needed - 1}</span>`;
-    return `<div class="ent"><div class="px">${esc(e.prefix || '—')}</div><div class="nm">${esc(e.name)}</div>${slotTags(e, cur.category)}${others}</div>`;
+    return `<button type="button" class="ent click" data-dxcc="${e.dxcc}" title="Mark this slot"><div class="px">${esc(e.prefix || '—')}</div><div class="nm">${esc(e.name)}</div>${slotTags(e, cur.category)}${others}</button>`;
   };
 
   document.getElementById('main').innerHTML = `
@@ -43,7 +43,7 @@ function render() {
       <div class="tiles noprint">${cats.map((c) => {
         const pend = c.entities.filter((e) => marked(e, c.category)).length;
         return `<button type="button" class="tile" data-cat="${c.category}" aria-pressed="${c.category === state.sel}">
-          <span class="l">${esc(label(c.category))}</span><span class="c">${c.entities.length}</span>
+          <span class="l" title="${esc(label(c.category))}">${esc(c.category === 'SAT' ? 'SAT' : label(c.category))}</span><span class="c">${c.entities.length}</span>
           <span class="bar"><span style="width:${Math.round(c.entities.length / max * 100)}%"></span></span>
           <span class="p">${pend ? pend + ' awaiting' : '&nbsp;'}</span></button>`;
       }).join('')}</div>
@@ -66,7 +66,9 @@ function render() {
           ${g.items.map(row).join('')}</div>`).join('') || '<div class="muted">Nothing needed here. Nice work.</div>'}
       </div>
       ${isSat ? '' : '<div class="muted small">“+N” = other slots that entity still needs in your profile. “Done” means this is its last missing slot.</div>'}
-    </section>`;
+      <div class="muted small noprint">Select an entity to mark its ${esc(label(cur.category))} slot as awaiting credit or won't submit.</div>
+    </section>
+    ${marksPanel()}`;
 
   document.querySelectorAll('.tile').forEach((b) => (b.onclick = () => {
     state.sel = b.dataset.cat; history.replaceState(null, '', '#' + state.sel); render();
@@ -74,11 +76,31 @@ function render() {
   document.getElementById('sort').onchange = (e) => { state.sort = e.target.value; render(); };
   document.getElementById('group').onchange = (e) => { state.group = e.target.value; render(); };
   document.getElementById('hide').onchange = (e) => { state.hideMarked = e.target.checked; render(); };
+  document.querySelectorAll('.ent.click').forEach((b) => (b.onclick = () => {
+    const ent = cur.entities.find((e) => e.dxcc === +b.dataset.dxcc);
+    openMarkMenu(ent, cur.category, load);
+  }));
+}
+
+// Every active mark, grouped by category (Marks mockup's side panel).
+function marksPanel() {
+  const ms = state.marks;
+  if (!ms.length) return '';
+  const order = ['MIXED', 'CW', 'PHONE', 'DIGITAL', 'SAT', '160M', '80M', '40M', '30M', '20M', '17M', '15M', '12M', '10M', '6M', '2M'];
+  const aw = ms.filter((m) => m.state === 'awaiting').length;
+  const groups = order.map((c) => ({ c, items: ms.filter((m) => m.category === c) })).filter((g) => g.items.length);
+  return `<section class="noprint" aria-labelledby="marks-h" style="display:flex;flex-direction:column;gap:14px">
+    <div class="head"><h2 id="marks-h">Pending marks</h2>
+      <div class="muted small">${aw} awaiting credit · ${ms.length - aw} won't submit · never counted as credits</div></div>
+    <div class="groups">${groups.map((g) => `<div class="group"><div class="gh"><span>${esc(g.c === 'MIXED' ? 'NEW ENTITY' : label(g.c).toUpperCase())}</span><span class="n">${g.items.length}</span></div>
+      ${g.items.map((m) => `<div class="ent"><div class="nm">${esc(m.name)}</div>${m.state === 'awaiting' ? '<span class="tag await">AWAITING</span>' : '<span class="tag wont">WON\'T SUBMIT</span>'}</div>`).join('')}</div>`).join('')}</div>
+  </section>`;
 }
 
 async function load() {
   try {
-    const data = await api('/api/view/slots');
+    const [data, marks] = await Promise.all([api('/api/view/slots'), api('/api/marks')]);
+    state.marks = marks.marks;
     if (data.no_data) {
       renderChrome({ title: 'Missing band slots', subtitle: 'No matrix imported yet' });
       document.getElementById('main').innerHTML = NO_DATA_HTML;

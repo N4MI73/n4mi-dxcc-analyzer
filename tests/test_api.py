@@ -174,6 +174,14 @@ def test_status_check(client, reference, credits):
     assert r.status_code == 200, r.text
     assert r.json()["reconciled"] and r.json()["pending_match"]
     assert client.get("/api/status").json()["last_status_check"]["reconciled"] is True
+    latest = client.get("/api/status-check/latest").json()
+    assert latest["reconciled"] and latest["is_current_import"] and latest["checked_at"]
+    # A newer import makes the stored check refer to an earlier import.
+    more = dict(credits)
+    new = next(e.dxcc for e in reference.current if e.dxcc not in credits)
+    more[new] = frozenset({MIXED, CW})
+    _import(client, render_paste(reference, more))
+    assert client.get("/api/status-check/latest").json()["is_current_import"] is False
 
 
 def test_clublog_refresh_failure_keeps_old(tmp_path, reference):
@@ -191,7 +199,8 @@ def test_clublog_refresh_failure_keeps_old(tmp_path, reference):
 
 
 def test_pages_and_static_files(client):
-    for path, script in (("/", "entities.js"), ("/slots", "slots.js"), ("/import", "import.js")):
+    for path, script in (("/", "entities.js"), ("/slots", "slots.js"), ("/import", "import.js"),
+                         ("/matrix", "matrix.js"), ("/paper", "paper.js"), ("/settings", "settings.js")):
         r = client.get(path)
         assert r.status_code == 200 and "text/html" in r.headers["content-type"]
         assert f"/static/{script}" in r.text
@@ -211,3 +220,11 @@ def test_since_last_import(client, reference, credits):
     assert [e["dxcc"] for e in since["new_entities"]] == [new]
     assert since["new_slots"] == [{"dxcc": new, "name": reference.by_dxcc[new].lotw_name,
                                    "category": CW}]
+
+
+def test_marks_list_carries_names(client, reference, credits):
+    _import(client, render_paste(reference, credits))
+    need = next(d for d, c in credits.items() if MIXED in c and CW not in c)
+    client.post("/api/marks", json={"dxcc": need, "category": CW, "state": "awaiting"})
+    m = client.get("/api/marks").json()["marks"][0]
+    assert m["name"] == reference.by_dxcc[need].lotw_name and "prefix" in m

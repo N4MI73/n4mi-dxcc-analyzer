@@ -12,7 +12,7 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 
 ## Status
 
-**Phase 1, Build Step 2b-2a: core logic, storage, the internal API and the first web pages** (Missing Entities, Missing Band Slots, Import). Matrix, Paper QSLs and Settings pages, exports and Docker come next. What exists:
+**Phase 1, Build Step 2b-2: core logic, storage, the internal API and all six pages** (Missing Entities, Missing Band Slots, Full Matrix, Paper QSLs, Import, Settings). Exports and Docker come next. What exists:
 
 | File | What it does |
 |---|---|

@@ -20,7 +20,7 @@ function rankKey(e, easiest) {
 function entRow(e) {
   const tags = slotTags(e, 'MIXED') + (e.sat_credited ? '<span class="tag sat" title="Already credited for Satellite DXCC">SAT</span>' : '');
   const rank = e.mw_rank != null ? `<span class="rk" title="Club Log Most Wanted rank">#${e.mw_rank}</span>` : '';
-  return `<div class="ent"><div class="px">${esc(e.prefix || '—')}</div><div class="nm">${esc(e.name)}</div>${tags}${rank}</div>`;
+  return `<button type="button" class="ent click" data-dxcc="${e.dxcc}" title="Mark ${esc(e.name)} as awaiting credit or won't submit"><div class="px">${esc(e.prefix || '—')}</div><div class="nm">${esc(e.name)}</div>${tags}${rank}</button>`;
 }
 
 function render() {
@@ -94,24 +94,16 @@ function render() {
         ${groups.map((g) => `<div class="group"><div class="gh"><span>${esc(g.name)}</span><span class="n">${g.items.length}</span></div>
           ${g.items.map(entRow).join('')}</div>`).join('') || '<div class="muted">Nothing to show.</div>'}
       </div>
-      <div class="muted small">${mw} <button class="linkbtn noprint" id="mw">Refresh from Club Log</button> <span id="mwmsg"></span></div>
+      <div class="muted small">${mw} <a class="noprint" href="/settings">Refresh in Settings</a> · Select an entity to mark it awaiting credit.</div>
     </section>`;
 
   document.getElementById('sort').onchange = (e) => { state.sort = e.target.value; render(); };
   document.getElementById('group').onchange = (e) => { state.group = e.target.value; render(); };
   document.getElementById('hide').onchange = (e) => { state.hideAwaiting = e.target.checked; render(); };
-  document.getElementById('mw').onclick = refreshMostWanted;
-}
-
-async function refreshMostWanted() {
-  const msg = document.getElementById('mwmsg');
-  msg.textContent = 'Fetching…';
-  try {
-    await postJSON('/api/clublog/refresh');
-    await load();
-  } catch (err) {
-    msg.innerHTML = `<span class="err">${esc(err.message)}</span>`;
-  }
+  document.querySelectorAll('.ent.click').forEach((b) => (b.onclick = () => {
+    const ent = state.data.entities.find((e) => e.dxcc === +b.dataset.dxcc);
+    openMarkMenu(ent, 'MIXED', load);
+  }));
 }
 
 async function load() {

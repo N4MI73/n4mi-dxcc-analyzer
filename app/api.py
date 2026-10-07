@@ -298,7 +298,9 @@ def view_matrix(request: Request, conn=Depends(get_conn)):
         rows.append(_entity(e, ranks) | tags.of(e.dxcc) | {
             "credited": [c for c in MATRIX_CATEGORIES if c in have],
             "needed": [c for c in shown if c not in have]})
-    return {"snapshot_id": snap["id"], "profile": _profile_json(profile),
+    return {"snapshot_id": snap["id"], "callsign": snap["callsign"],
+            "imported_at": snap["imported_at"], "saved_at": snap["saved_at"],
+            "profile": _profile_json(profile),
             "columns": [{"category": c, "label": LABELS[c], "in_profile": c in shown}
                         for c in MATRIX_CATEGORIES],
             "entities": rows}
@@ -341,8 +343,10 @@ class MarkPatch(BaseModel):
 
 
 @router.get("/api/marks")
-def list_marks(conn=Depends(get_conn)):
-    return {"marks": [{"id": i, **m.__dict__} for i, m in db.active_marks(conn)]}
+def list_marks(request: Request, conn=Depends(get_conn)):
+    by = ref(request).by_dxcc
+    return {"marks": [{"id": i, **m.__dict__, "name": by[m.dxcc].lotw_name,
+                       "prefix": by[m.dxcc].prefix} for i, m in db.active_marks(conn)]}
 
 
 @router.post("/api/marks")
@@ -468,6 +472,18 @@ def status_check(body: TextBody, conn=Depends(get_conn)):
            "not_checked": res.not_checked}
     db.add_status_check(conn, snap["id"], out)
     return out
+
+
+@router.get("/api/status-check/latest")
+def status_check_latest(conn=Depends(get_conn)):
+    """The most recent Account Status check, as returned when it was run."""
+    row = db.latest_status_check(conn)
+    if row is None:
+        return {"none": True}
+    cur = db.current_snapshot(conn)
+    return json.loads(row["result_json"]) | {
+        "checked_at": row["checked_at"],
+        "is_current_import": bool(cur and cur["id"] == row["snapshot_id"])}
 
 
 # ---------- Club Log Most Wanted ----------

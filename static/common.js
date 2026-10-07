@@ -35,11 +35,9 @@ async function api(path, opts = {}) {
 const postJSON = (path, data) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(data ?? {}) });
 
-// Pages not built yet appear in the navigation, greyed out, so the layout
-// matches the mockups. They become links in Build Step 2b-2b.
 const PAGES = [
-  ['/', 'Missing Entities'], ['/slots', 'Missing Band Slots'], [null, 'Full Matrix'],
-  [null, 'Paper QSLs'], ['/import', 'Import'], [null, 'Settings'],
+  ['/', 'Missing Entities'], ['/slots', 'Missing Band Slots'], ['/matrix', 'Full Matrix'],
+  ['/paper', 'Paper QSLs'], ['/import', 'Import'], ['/settings', 'Settings'],
 ];
 
 function profileText(p) {
@@ -95,3 +93,55 @@ function showError(where, err) {
 const NO_DATA_HTML = `<div class="panel empty"><h2>No import yet</h2>
   <p class="muted">Paste your LoTW Award Credit Matrix to see what you still need.</p>
   <a class="btn primary" href="/import">Import the matrix</a></div>`;
+
+// ---------- Pending-mark menu (approved Marks mockup) ----------
+// One dialog shared by Missing Entities, Missing Band Slots and Full Matrix.
+// ent: {dxcc, name, marks}; cat: category code; onDone: reload callback.
+function openMarkMenu(ent, cat, onDone) {
+  let dlg = document.getElementById('markdlg');
+  if (!dlg) {
+    dlg = document.createElement('dialog');
+    dlg.id = 'markdlg';
+    dlg.className = 'markdlg';
+    document.body.appendChild(dlg);
+  }
+  const mark = (ent.marks || {})[cat];
+  const st = mark ? mark.state : 'awaiting';
+  const slot = cat === 'MIXED' ? 'new entity (Mixed)' : label(cat);
+  dlg.innerHTML = `<form method="dialog" class="menu" aria-label="Mark ${esc(ent.name)} ${esc(slot)}">
+    <div><div class="mt">${esc(ent.name)} · ${esc(slot)}</div>
+      <div class="muted small">${mark ? 'Currently marked: ' + (mark.state === 'awaiting' ? 'awaiting credit' : "won't submit") : 'Not marked'}</div></div>
+    <fieldset><legend class="muted small">This slot is confirmed in LoTW and…</legend>
+      <label class="opt"><input type="radio" name="st" value="awaiting"${st === 'awaiting' ? ' checked' : ''}>
+        <span><b>Awaiting credit</b><br><span class="muted small">Not yet credited; you'll submit it with your next application</span></span></label>
+      <label class="opt"><input type="radio" name="st" value="wont_submit"${st === 'wont_submit' ? ' checked' : ''}>
+        <span><b>Won't submit</b><br><span class="muted small">You won't use this QSL for credit, for example an EchoLink contact</span></span></label>
+    </fieldset>
+    <label class="muted small" for="mk-note">Note (optional)</label>
+    <input id="mk-note" type="text" class="txt" value="${esc(mark ? mark.note : '')}" placeholder="Call worked, mode, date…">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button type="button" class="btn primary" id="mk-save">Save mark</button>
+      ${mark ? '<button type="button" class="btn" id="mk-clear">Clear mark</button>' : ''}
+      <button type="button" class="btn quiet" id="mk-cancel">Cancel</button>
+    </div>
+    <div id="mk-msg" role="status" class="small"></div>
+    <div class="muted small">A mark clears itself when an import shows this slot credited.</div>
+  </form>`;
+  const msg = (t) => { dlg.querySelector('#mk-msg').innerHTML = `<span class="err">${esc(t)}</span>`; };
+  dlg.querySelector('#mk-cancel').onclick = () => dlg.close();
+  dlg.querySelector('#mk-save').onclick = async () => {
+    const state = dlg.querySelector('input[name=st]:checked').value;
+    const note = dlg.querySelector('#mk-note').value.trim();
+    try {
+      if (mark) await api(`/api/marks/${mark.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, note }) });
+      else await postJSON('/api/marks', { dxcc: ent.dxcc, category: cat, state, note });
+      dlg.close(); onDone();
+    } catch (err) { msg(err.message); }
+  };
+  const clr = dlg.querySelector('#mk-clear');
+  if (clr) clr.onclick = async () => {
+    try { await api(`/api/marks/${mark.id}`, { method: 'DELETE' }); dlg.close(); onDone(); }
+    catch (err) { msg(err.message); }
+  };
+  dlg.showModal();
+}

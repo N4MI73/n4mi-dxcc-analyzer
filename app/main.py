@@ -25,8 +25,9 @@ from .reference import load_reference
 log = logging.getLogger("dxcc")
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-# Page URL -> HTML file. Pages for Matrix, Paper QSLs and Settings come in 2b-2b.
-PAGES = {"/": "entities.html", "/slots": "slots.html", "/import": "import.html"}
+# Page URL -> HTML file.
+PAGES = {"/": "entities.html", "/slots": "slots.html", "/matrix": "matrix.html",
+         "/paper": "paper.html", "/import": "import.html", "/settings": "settings.html"}
 
 
 def create_app(db_path=None, reference=None, clublog_fetch=None):
