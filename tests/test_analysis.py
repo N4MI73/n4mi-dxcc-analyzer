@@ -110,4 +110,19 @@ def test_satellite_profile_option(reference):
     with_sat = Profile(modes=(CW, PHONE, "DIGITAL", SAT))
     assert with_sat.modes == (CW, PHONE, "DIGITAL", SAT)
     need = needed_slots({1: frozenset({MIXED, CW, PHONE})}, reference, with_sat)[1]
-    assert SAT in need and "DIGITAL" in need
+    assert SAT not in need and "DIGITAL" in need      # Satellite is separate (D43)
+
+
+def test_satellite_needs_cover_all_entities(reference):
+    # D44: Satellite needs span every current entity, Mixed-credited or not.
+    from app.analysis import satellite_needs
+    with_sat = Profile(modes=(CW, PHONE, "DIGITAL", SAT))
+    credits = {1: frozenset({MIXED, CW}), 3: frozenset({SAT})}
+    sat = satellite_needs(credits, reference, with_sat)
+    assert 1 in sat and 3 not in sat and len(sat) == len(reference.current) - 1
+    assert satellite_needs(credits, reference, DEFAULT_PROFILE) == []
+    by_cat = slots_by_category(needed_slots(credits, reference, with_sat), with_sat, sat)
+    assert by_cat[SAT] == sat and 3 not in by_cat[CW]
+    s = summarize(credits, reference, with_sat)
+    assert s.satellite_missing == len(sat) and s.entities_missing == len(reference.current) - 1
+    assert summarize(credits, reference, DEFAULT_PROFILE).satellite_missing is None

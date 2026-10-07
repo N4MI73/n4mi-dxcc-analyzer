@@ -12,7 +12,7 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 
 ## Status
 
-**Phase 1, Build Step 1: core logic only.** There is no web interface or Docker setup yet. What exists:
+**Phase 1, Build Step 2b-1: core logic, storage and the internal API.** There are no web pages or Docker setup yet. What exists:
 
 | File | What it does |
 |---|---|
@@ -24,6 +24,10 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 | `app/marks.py` | Rules for "awaiting credit" / "won't submit" marks |
 | `app/status_check.py` | Cross-check against LoTW's Account Status table |
 | `app/clublog.py` | Club Log Most Wanted ranking (public, no key), fetched only on request |
+| `app/paper.py` | Paper QSL cards not yet credited: what each card would fill |
+| `app/db.py` | SQLite storage: imports, credits, marks, paper cards, settings |
+| `app/api.py` | Internal endpoints for the app's own pages (not the DXMon contract) |
+| `app/main.py` | App setup, `/healthz`, start-up check |
 | `app/data/dxcc_entities.csv` | The 402 DXCC entities (340 current), with continent and CQ zone |
 | `tools/build_reference.py` | Development only: rebuilds that table from the verified list and AD1C's `cty.csv` |
 
@@ -34,6 +38,15 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 - **Bands and modes are credited separately**, as ARRL does. Band-and-mode combinations are not slots.
 - **Deleted entities are excluded** from every count.
 - **A failed import changes nothing**, and a suspicious one needs a deliberate "Save anyway".
+
+## Running locally
+
+```
+pip install -r requirements.txt
+uvicorn app.main:create_app --factory --port 8086
+```
+
+Then `http://localhost:8086/healthz` answers `{"status":"ok"}`. The database is created in `data/` (set `DATA_DIR` to put it elsewhere).
 
 ## Running the tests
 

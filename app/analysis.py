@@ -18,7 +18,7 @@ Definitions (confirmed by Dan, 2026-10-05, assumption A1):
 from collections import Counter
 from dataclasses import dataclass
 
-from .categories import MATRIX_CATEGORIES, MIXED
+from .categories import MATRIX_CATEGORIES, MIXED, SAT
 
 
 def totals(credits):
@@ -35,27 +35,45 @@ def missing_entities(credits, reference):
 
 
 def needed_slots(credits, reference, profile):
-    """{dxcc: [category, ...]} for credited entities missing profile slots.
+    """{dxcc: [category, ...]} for credited entities missing profile band or
+    mode slots. Satellite is not included: it is a separate award (D43), so
+    its needs come from satellite_needs() instead.
 
-    Entities with every profile slot credited are omitted.
+    Entities with every such slot credited are omitted.
     """
+    slots = [c for c in profile.slot_categories if c != SAT]
     out = {}
     for e in reference.current:
         cats = credits.get(e.dxcc, frozenset())
         if MIXED not in cats:
             continue
-        need = [c for c in profile.slot_categories if c not in cats]
+        need = [c for c in slots if c not in cats]
         if need:
             out[e.dxcc] = need
     return out
 
 
-def slots_by_category(needed, profile):
-    """{category: [dxcc, ...]} — the by-band chase lists."""
+def satellite_needs(credits, reference, profile):
+    """Current entities with no Satellite credit, across ALL current entities
+    whether or not Mixed is credited (D44). Empty unless Satellite is in the
+    profile."""
+    if SAT not in profile.modes:
+        return []
+    return [e.dxcc for e in reference.current if SAT not in credits.get(e.dxcc, ())]
+
+
+def slots_by_category(needed, profile, sat_needs=()):
+    """{category: [dxcc, ...]} — the by-band chase lists.
+
+    The Satellite list (when in the profile) is `sat_needs`, from
+    satellite_needs().
+    """
     out = {c: [] for c in profile.slot_categories}
     for dxcc, cats in needed.items():
         for c in cats:
             out[c].append(dxcc)
+    if SAT in out:
+        out[SAT] = list(sat_needs)
     return out
 
 
@@ -64,9 +82,10 @@ class Summary:
     entities_current: int
     entities_credited: int
     entities_missing: int
-    complete: int          # credited entities with every profile slot credited
-    one_slot_away: int     # credited entities missing exactly one profile slot
-    slots_missing: int
+    complete: int          # credited entities with every band/mode profile slot credited
+    one_slot_away: int     # credited entities missing exactly one band/mode profile slot
+    slots_missing: int     # band/mode slots on credited entities (Satellite excluded)
+    satellite_missing: int | None = None   # D44; None unless Satellite is in the profile
 
 
 def summarize(credits, reference, profile):
@@ -79,6 +98,8 @@ def summarize(credits, reference, profile):
         complete=credited - len(needed),
         one_slot_away=sum(1 for v in needed.values() if len(v) == 1),
         slots_missing=sum(len(v) for v in needed.values()),
+        satellite_missing=(len(satellite_needs(credits, reference, profile))
+                           if SAT in profile.modes else None),
     )
 
 
