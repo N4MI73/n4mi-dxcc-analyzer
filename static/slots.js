@@ -41,11 +41,13 @@ function render() {
       <div class="head"><h2 id="pick-h">What's needed on each band or mode</h2>
         <div class="muted small">Credited entities still missing each slot · pick one to see the chase list</div></div>
       <div class="tiles noprint">${cats.map((c) => {
-        const pend = c.entities.filter((e) => marked(e, c.category)).length;
+        const pendN = c.entities.filter((e) => (e.marks[c.category] || {}).state === 'awaiting').length;
+        const cardN = c.entities.filter((e) => (e.cards[c.category] || []).length).length;
+        const pend = [pendN && `${pendN} awaiting`, cardN && `${cardN} card${cardN > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
         return `<button type="button" class="tile" data-cat="${c.category}" aria-pressed="${c.category === state.sel}">
           <span class="l" title="${esc(label(c.category))}">${esc(c.category === 'SAT' ? 'SAT' : label(c.category))}</span><span class="c">${c.entities.length}</span>
           <span class="bar"><span style="width:${Math.round(c.entities.length / max * 100)}%"></span></span>
-          <span class="p">${pend ? pend + ' awaiting' : '&nbsp;'}</span></button>`;
+          <span class="p">${pend || '&nbsp;'}</span></button>`;
       }).join('')}</div>
     </section>
     <section aria-labelledby="list-h" style="display:flex;flex-direction:column;gap:16px">
@@ -112,7 +114,7 @@ async function load() {
     renderChrome({
       title: `${data.callsign || 'DXCC'} · Missing band slots`,
       subtitle: `${num(s.slots_missing)} slots on ${s.entities_credited} credited entities · ${esc(profileText(data.profile))}`,
-      actions: '<a class="btn primary" href="/import">Paste new matrix</a><button class="btn" onclick="window.print()">Print</button>',
+      actions: '<a class="btn primary" href="/import">Paste new matrix</a>' + EXPORT_MENU + '<button class="btn" onclick="window.print()">Print</button>',
     });
     render();
   } catch (err) {

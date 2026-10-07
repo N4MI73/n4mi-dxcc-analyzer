@@ -7,11 +7,13 @@ before DXMon depends on it, so a page redesign can never break DXMon.
 """
 
 import json
+from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import analysis, clublog, db
+from . import analysis, clublog, db, exports
 from .categories import LABELS, MATRIX_CATEGORIES, MIXED, SAT, Profile
 from .marks import Mark, check_mark
 from .paper import PaperQSL, describe_entry, fills_in_profile, is_credited
@@ -499,3 +501,54 @@ def clublog_refresh(request: Request, conn=Depends(get_conn)):
     db.set_external(conn, "clublog_most_wanted", {str(k): v for k, v in ranks.items()})
     _, fetched = _rankings(conn)
     return {"entities_ranked": len(ranks), "fetched_at": fetched}
+
+
+# ---------- exports (follow the profile, never a page's filters) ----------
+
+def _export_data(request, conn):
+    ctx = _context(conn)
+    if ctx is None:
+        raise HTTPException(409, "Import the matrix first; there is nothing to export yet.")
+    credits, snap, profile = ctx
+    ranks, _ = _rankings(conn)
+    chk = db.latest_status_check(conn)
+    check = None
+    if chk and chk["snapshot_id"] == snap["id"]:
+        check = json.loads(chk["result_json"]) | {"checked_at": chk["checked_at"]}
+    return exports.ExportData(credits, ref(request), profile,
+                              [m for _, m in db.active_marks(conn)],
+                              [c for _, c in db.active_cards(conn)], ranks, snap, check)
+
+
+def _download(content, filename, media):
+    return Response(content, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+CSV_TYPE = "text/csv; charset=utf-8"
+
+
+@router.get("/export/missing_entities.csv")
+def export_missing_entities(request: Request, conn=Depends(get_conn)):
+    return _download(exports.missing_entities_csv(_export_data(request, conn)),
+                     "missing_entities.csv", CSV_TYPE)
+
+
+@router.get("/export/missing_slots.csv")
+def export_missing_slots(request: Request, conn=Depends(get_conn)):
+    return _download(exports.missing_slots_csv(_export_data(request, conn)),
+                     "missing_slots.csv", CSV_TYPE)
+
+
+@router.get("/export/no_confirms.csv")
+def export_no_confirms(request: Request, conn=Depends(get_conn)):
+    """DXMon bridge (D48): drop-in replacement for DXMon's no_confirms.csv."""
+    return _download(exports.no_confirms_csv(_export_data(request, conn)),
+                     "no_confirms.csv", CSV_TYPE)
+
+
+@router.get("/export/workbook.xlsx")
+def export_workbook(request: Request, conn=Depends(get_conn)):
+    return _download(exports.workbook(_export_data(request, conn)),
+                     f"dxcc_analysis_{date.today().isoformat()}.xlsx",
+                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

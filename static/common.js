@@ -145,3 +145,14 @@ function openMarkMenu(ent, cat, onDone) {
   };
   dlg.showModal();
 }
+
+// Export menu for the page headers. Files follow the operating profile,
+// never a page's temporary filters.
+const EXPORT_MENU = `<details class="exportmenu">
+  <summary class="btn">Export</summary>
+  <div class="exportlist" role="menu">
+    <a role="menuitem" href="/export/workbook.xlsx" download><b>Workbook (.xlsx)</b><span>Summary, missing entities and slots, by band, matrix, marks, paper QSLs</span></a>
+    <a role="menuitem" href="/export/missing_entities.csv" download><b>Missing entities (.csv)</b><span>With Most Wanted rank, marks and paper cards</span></a>
+    <a role="menuitem" href="/export/missing_slots.csv" download><b>Missing band slots (.csv)</b><span>One column per band and mode in your profile</span></a>
+    <a role="menuitem" href="/export/no_confirms.csv" download><b>For DX Monitor: no_confirms.csv</b><span>Drop-in file for DX Monitor's Trigger Builder picker</span></a>
+  </div></details>`;

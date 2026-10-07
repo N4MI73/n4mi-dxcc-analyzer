@@ -12,7 +12,7 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 
 ## Status
 
-**Phase 1, Build Step 2b-2: core logic, storage, the internal API and all six pages** (Missing Entities, Missing Band Slots, Full Matrix, Paper QSLs, Import, Settings). Exports and Docker come next. What exists:
+**Phase 1, Build Step 2b complete: core logic, storage, the internal API, all six pages and the exports.** Docker deployment comes next. What exists:
 
 | File | What it does |
 |---|---|
@@ -28,6 +28,7 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 | `app/db.py` | SQLite storage: imports, credits, marks, paper cards, settings |
 | `app/api.py` | Internal endpoints for the app's own pages (not the DXMon contract) |
 | `app/main.py` | App setup, `/healthz`, start-up check |
+| `app/exports.py` | CSV and workbook exports, including the DX Monitor bridge file |
 | `static/` | The web pages: plain HTML, CSS and JavaScript, no build step |
 | `app/data/dxcc_entities.csv` | The 402 DXCC entities (340 current), with continent and CQ zone |
 | `tools/build_reference.py` | Development only: rebuilds that table from the verified list and AD1C's `cty.csv` |
@@ -48,6 +49,17 @@ uvicorn app.main:create_app --factory --port 8086
 ```
 
 Then open `http://localhost:8086/`. `http://localhost:8086/healthz` answers `{"status":"ok"}`. The database is created in `data/` (set `DATA_DIR` to put it elsewhere).
+
+## Exports
+
+The **Export** button on the list pages offers four files. All follow the operating profile, not a page's temporary filters.
+
+| File | Contents |
+|---|---|
+| `dxcc_analysis_YYYY-MM-DD.xlsx` | Summary, Missing Entities, Missing Slots, By Band, Matrix, Pending Marks, Paper QSLs |
+| `missing_entities.csv` | Never-credited entities with Most Wanted rank, marks and paper cards |
+| `missing_slots.csv` | One row per credited entity with a need; one column per profile band and mode |
+| `no_confirms.csv` | For DX Monitor: a drop-in replacement for its `no_confirms.csv` (`Entity,Prefix`, no byte-order mark). Copy it to DX Monitor's server folder and restart that container. |
 
 ## Running the tests
 

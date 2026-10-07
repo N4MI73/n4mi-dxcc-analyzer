@@ -118,7 +118,7 @@ async function load() {
     renderChrome({
       title: `${data.callsign || 'DXCC'} · What's still needed`,
       subtitle: `Matrix imported ${esc(when(data.saved_at || data.imported_at))} · ${esc(profileText(data.profile))}`,
-      actions: '<a class="btn primary" href="/import">Paste new matrix</a><button class="btn" onclick="window.print()">Print</button>',
+      actions: '<a class="btn primary" href="/import">Paste new matrix</a>' + EXPORT_MENU + '<button class="btn" onclick="window.print()">Print</button>',
     });
     render();
   } catch (err) {
