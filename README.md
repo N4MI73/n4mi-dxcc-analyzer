@@ -12,7 +12,7 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 
 ## Status
 
-**Phase 1, Build Step 2b-1: core logic, storage and the internal API.** There are no web pages or Docker setup yet. What exists:
+**Phase 1, Build Step 2b-2a: core logic, storage, the internal API and the first web pages** (Missing Entities, Missing Band Slots, Import). Matrix, Paper QSLs and Settings pages, exports and Docker come next. What exists:
 
 | File | What it does |
 |---|---|
@@ -28,6 +28,7 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 | `app/db.py` | SQLite storage: imports, credits, marks, paper cards, settings |
 | `app/api.py` | Internal endpoints for the app's own pages (not the DXMon contract) |
 | `app/main.py` | App setup, `/healthz`, start-up check |
+| `static/` | The web pages: plain HTML, CSS and JavaScript, no build step |
 | `app/data/dxcc_entities.csv` | The 402 DXCC entities (340 current), with continent and CQ zone |
 | `tools/build_reference.py` | Development only: rebuilds that table from the verified list and AD1C's `cty.csv` |
 
@@ -46,7 +47,7 @@ pip install -r requirements.txt
 uvicorn app.main:create_app --factory --port 8086
 ```
 
-Then `http://localhost:8086/healthz` answers `{"status":"ok"}`. The database is created in `data/` (set `DATA_DIR` to put it elsewhere).
+Then open `http://localhost:8086/`. `http://localhost:8086/healthz` answers `{"status":"ok"}`. The database is created in `data/` (set `DATA_DIR` to put it elsewhere).
 
 ## Running the tests
 

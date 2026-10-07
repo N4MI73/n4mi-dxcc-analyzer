@@ -188,3 +188,26 @@ def test_clublog_refresh_failure_keeps_old(tmp_path, reference):
         r = c.post("/api/clublog/refresh")
         assert r.status_code == 502 and "Keeping the previous list" in r.json()["detail"]
         assert c.get("/api/status").json()["most_wanted_fetched_at"] == fetched
+
+
+def test_pages_and_static_files(client):
+    for path, script in (("/", "entities.js"), ("/slots", "slots.js"), ("/import", "import.js")):
+        r = client.get(path)
+        assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+        assert f"/static/{script}" in r.text
+        assert client.get(f"/static/{script}").status_code == 200
+    assert client.get("/static/common.js").status_code == 200
+    assert client.get("/static/style.css").status_code == 200
+
+
+def test_since_last_import(client, reference, credits):
+    _import(client, render_paste(reference, credits))
+    assert client.get("/api/view/entities").json()["since_last"] is None     # first import
+    more = dict(credits)
+    new = next(e.dxcc for e in reference.current if e.dxcc not in credits)
+    more[new] = frozenset({MIXED, CW})
+    _import(client, render_paste(reference, more))
+    since = client.get("/api/view/entities").json()["since_last"]
+    assert [e["dxcc"] for e in since["new_entities"]] == [new]
+    assert since["new_slots"] == [{"dxcc": new, "name": reference.by_dxcc[new].lotw_name,
+                                   "category": CW}]

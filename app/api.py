@@ -240,10 +240,19 @@ def view_entities(request: Request, conn=Depends(get_conn)):
         # D44: show when a never-credited entity already has Satellite credit.
         row["sat_credited"] = (SAT in credits.get(e.dxcc, ())) if sat_on else None
         rows.append(row)
+    # "Since last import": compare with the snapshot that was current when this
+    # one was previewed (None on the first import, or if that one was deleted).
+    since = None
+    before = db.get_snapshot(conn, snap["based_on"]) if snap["based_on"] else None
+    if before is not None:
+        since = _changes_json(analysis.changes(db.credits_of(conn, before["id"]), credits,
+                                               profile), reference)
+        since["previous_saved_at"] = before["saved_at"] or before["imported_at"]
     return {"snapshot_id": snap["id"], "callsign": snap["callsign"],
+            "imported_at": snap["imported_at"], "saved_at": snap["saved_at"],
             "profile": _profile_json(profile), "most_wanted_fetched_at": fetched,
             "summary": analysis.summarize(credits, reference, profile).__dict__,
-            "entities": rows}
+            "since_last": since, "entities": rows}
 
 
 @router.get("/api/view/slots")
@@ -266,7 +275,9 @@ def view_slots(request: Request, conn=Depends(get_conn)):
             ents.append(_entity(e, ranks) | tags.of(d) |
                         {"slots_needed": len(needed.get(d, ()))})
         cats.append({"category": cat, "label": LABELS[cat], "entities": ents})
-    return {"snapshot_id": snap["id"], "profile": _profile_json(profile),
+    return {"snapshot_id": snap["id"], "callsign": snap["callsign"],
+            "imported_at": snap["imported_at"], "saved_at": snap["saved_at"],
+            "profile": _profile_json(profile),
             "summary": analysis.summarize(credits, reference, profile).__dict__,
             "categories": cats}
 

@@ -15,6 +15,8 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import clublog, db
 from .api import router
@@ -22,6 +24,9 @@ from .reference import load_reference
 
 log = logging.getLogger("dxcc")
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+# Page URL -> HTML file. Pages for Matrix, Paper QSLs and Settings come in 2b-2b.
+PAGES = {"/": "entities.html", "/slots": "slots.html", "/import": "import.html"}
 
 
 def create_app(db_path=None, reference=None, clublog_fetch=None):
@@ -43,5 +48,9 @@ def create_app(db_path=None, reference=None, clublog_fetch=None):
     finally:
         conn.close()
     app.include_router(router)
+    for path, page in PAGES.items():
+        app.add_api_route(path, lambda page=page: FileResponse(STATIC_DIR / page),
+                          include_in_schema=False)
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app
 
