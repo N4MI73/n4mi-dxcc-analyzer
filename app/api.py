@@ -267,6 +267,7 @@ def view_entities(request: Request, conn=Depends(get_conn)):
         row = _entity(e, ranks) | tags.of(e.dxcc)
         # D44: show when a never-credited entity already has Satellite credit.
         row["sat_credited"] = (SAT in credits.get(e.dxcc, ())) if sat_on else None
+        row["credited"] = sorted(credits.get(e.dxcc, ()))   # for the mark menu
         rows.append(row)
     # "Since last import": compare with the snapshot that was current when this
     # one was previewed (None on the first import, or if that one was deleted).
@@ -292,7 +293,8 @@ def view_slots(request: Request, conn=Depends(get_conn)):
     reference = ref(request)
     ranks, _ = _rankings(conn)
     tags = _Tags(conn, credits, profile)
-    needed = analysis.needed_slots(credits, reference, profile)
+    # Award view (D51): never-credited entities are in every list, flagged "new".
+    needed = analysis.needed_slots(credits, reference, profile, include_new=True)
     sat = analysis.satellite_needs(credits, reference, profile)
     by_cat = analysis.slots_by_category(needed, profile, sat)
     cats = []
@@ -301,8 +303,12 @@ def view_slots(request: Request, conn=Depends(get_conn)):
         for d in dxccs:
             e = reference.by_dxcc[d]
             ents.append(_entity(e, ranks) | tags.of(d) |
-                        {"slots_needed": len(needed.get(d, ()))})
-        cats.append({"category": cat, "label": LABELS[cat], "entities": ents})
+                        {"slots_needed": len(needed.get(d, ())),
+                         "new": MIXED not in credits.get(d, ()),
+                         "credited": sorted(credits.get(d, ()))})
+        new_n = sum(1 for x in ents if x["new"])
+        cats.append({"category": cat, "label": LABELS[cat], "entities": ents,
+                     "confirmed_count": len(ents) - new_n, "new_count": new_n})
     return {"snapshot_id": snap["id"], "callsign": snap["callsign"],
             "imported_at": snap["imported_at"], "saved_at": snap["saved_at"],
             "profile": _profile_json(profile),
@@ -325,7 +331,8 @@ def view_matrix(request: Request, conn=Depends(get_conn)):
         have = credits.get(e.dxcc, frozenset())
         rows.append(_entity(e, ranks) | tags.of(e.dxcc) | {
             "credited": [c for c in MATRIX_CATEGORIES if c in have],
-            "needed": [c for c in shown if c not in have]})
+            "needed": [c for c in shown if c not in have],
+            "new": MIXED not in have})
     return {"snapshot_id": snap["id"], "callsign": snap["callsign"],
             "imported_at": snap["imported_at"], "saved_at": snap["saved_at"],
             "profile": _profile_json(profile),

@@ -77,6 +77,11 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--amber); }
 .tag.wont { border: 1px solid var(--line2); color: var(--muted); }
 .tag.card { border: 1.5px dotted var(--card); color: var(--card); }
 .tag.sat { border: 1px solid var(--line2); color: var(--soft); }
+.tag.new { border: 1px solid var(--soft); color: var(--soft); letter-spacing: .04em; }
+.menu .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px 10px; }
+.menu .slots label { display: flex; gap: 6px; align-items: center; font: 13px var(--mono); cursor: pointer; }
+.menu .slots input { accent-color: var(--amber); width: 16px; height: 16px; }
+.menu .slots .cr { color: var(--muted); text-decoration: line-through; }
 .tag svg { width: 12px; height: 12px; }
 
 /* band tiles */
@@ -200,7 +205,7 @@ input.txt, input[type=date] { min-height: 40px; padding: 0 12px; border-radius: 
   .group { display: block; } .group .ent + .ent { margin-top: 3px; }
   .ent .px, .group .gh .n, .head h2 .n, .stat.hot .v, .stat.hot .k, .brand { color: #000; }
   .muted, .sub, .stat .k, .ent .rk, .ent .ot { color: #444; }
-  .tag.await, .tag.card, .tag.wont, .tag.sat { color: #000; border-color: #000; }
+  .tag.await, .tag.card, .tag.wont, .tag.sat, .tag.new { color: #000; border-color: #000; }
   .mxwrap { overflow: visible; border: 0; } table.mx th { position: static; color: #000; background: #fff; }
   .cell.need { background: #000; } .cell.done { background: #ddd; } .cell.await, .cell.card { border-color: #000; }
   table.mx td.px { color: #000; } table.mx td { border-bottom-color: #ccc; } table.mx tr { break-inside: avoid; }

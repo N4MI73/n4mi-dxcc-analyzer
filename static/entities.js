@@ -18,7 +18,10 @@ function rankKey(e, easiest) {
 }
 
 function entRow(e) {
-  const tags = slotTags(e, 'MIXED') + (e.sat_credited ? '<span class="tag sat" title="Already credited for Satellite DXCC">SAT</span>' : '');
+  const others = Object.keys(e.marks).filter((c) => c !== 'MIXED').length;
+  const tags = slotTags(e, 'MIXED')
+    + (others ? `<span class="ot" title="Band and mode slots marked for this entity">+${others} slot${others > 1 ? 's' : ''}</span>` : '')
+    + (e.sat_credited ? '<span class="tag sat" title="Already credited for Satellite DXCC">SAT</span>' : '');
   const rank = e.mw_rank != null ? `<span class="rk" title="Club Log Most Wanted rank">#${e.mw_rank}</span>` : '';
   return `<button type="button" class="ent click" data-dxcc="${e.dxcc}" title="Mark ${esc(e.name)} as awaiting credit or won't submit"><div class="px">${esc(e.prefix || '—')}</div><div class="nm">${esc(e.name)}</div>${tags}${rank}</button>`;
 }
@@ -69,8 +72,8 @@ function render() {
         <div class="muted small">${checkTxt}</div></div>
       <div class="panel stat hot"><div class="k">NEVER CONFIRMED</div><div class="v">${s.entities_missing}</div>
         <div class="muted small">${awaitingEntities} awaiting credit in LoTW${cardEntities ? ` · ${cardEntities} with a paper card` : ''}</div></div>
-      <div class="panel stat"><div class="k">MISSING BAND SLOTS</div><div class="v">${num(s.slots_missing)}</div>
-        <div class="muted small">On credited entities · ${slotMarks} awaiting credit</div></div>
+      <div class="panel stat"><div class="k">MISSING BAND SLOTS</div><div class="v">${num(s.slots_missing + s.slots_missing_new)}</div>
+        <div class="muted small">${num(s.slots_missing)} on credited entities, ${num(s.slots_missing_new)} on never-confirmed · ${slotMarks} awaiting credit</div></div>
       <div class="panel stat"><div class="k">COMPLETE IN PROFILE</div><div class="v">${s.complete}</div>
         <div class="muted small">${s.one_slot_away} more are one slot away</div></div>
     </section>
@@ -94,7 +97,7 @@ function render() {
         ${groups.map((g) => `<div class="group"><div class="gh"><span>${esc(g.name)}</span><span class="n">${g.items.length}</span></div>
           ${g.items.map(entRow).join('')}</div>`).join('') || '<div class="muted">Nothing to show.</div>'}
       </div>
-      <div class="muted small">${mw} <a class="noprint" href="/settings">Refresh in Settings</a> · Select an entity to mark it awaiting credit.</div>
+      <div class="muted small">${mw} <a class="noprint" href="/settings">Refresh in Settings</a> · Select an entity to mark it and the bands and modes its confirmation covers.</div>
     </section>`;
 
   document.getElementById('sort').onchange = (e) => { state.sort = e.target.value; render(); };
@@ -102,7 +105,7 @@ function render() {
   document.getElementById('hide').onchange = (e) => { state.hideAwaiting = e.target.checked; render(); };
   document.querySelectorAll('.ent.click').forEach((b) => (b.onclick = () => {
     const ent = state.data.entities.find((e) => e.dxcc === +b.dataset.dxcc);
-    openMarkMenu(ent, 'MIXED', load);
+    openMarkMenu(ent, state.data.profile, load);
   }));
 }
 

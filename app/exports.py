@@ -6,8 +6,10 @@ so a file always means the same thing.
 
 Files:
   missing_entities.csv   never-credited entities with marks and paper cards
-  missing_slots.csv      one row per credited entity with a need; one column per
-                         profile band/mode: Needed / Awaiting / Won't submit / Card
+  missing_slots.csv      one row per entity with a profile band/mode need (never-
+                         credited entities included, D51, flagged in the last
+                         column); one column per profile band/mode:
+                         Needed / Awaiting / Won't submit / Card
   no_confirms.csv        DXMon bridge: exactly "Entity","Prefix", LoTW names,
                          every field quoted, NO byte-order mark (DXMon reads plain
                          UTF-8 and looks up the column named exactly "Entity")
@@ -54,7 +56,8 @@ class ExportData:
             for cat in fills_in_profile(c, credits, profile):
                 self.card_slots.setdefault((c.dxcc, cat), []).append(c.state)
         self.missing = analysis.missing_entities(credits, reference)
-        self.needed = analysis.needed_slots(credits, reference, profile)
+        # Award view (D51): never-credited entities need every profile slot too.
+        self.needed = analysis.needed_slots(credits, reference, profile, include_new=True)
         self.sat = analysis.satellite_needs(credits, reference, profile)
         self.columns = list(profile.bands) + list(profile.modes)   # bands first, as on screen
 
@@ -67,7 +70,7 @@ class ExportData:
         return ", ".join(parts) or "Needed"
 
     def needs_of(self, dxcc):
-        """Profile categories this credited entity still needs (Satellite included
+        """Profile categories this entity still needs (Satellite included
         when in the profile, since Satellite needs span every entity, D44)."""
         need = list(self.needed.get(dxcc, ()))
         if SAT in self.profile.modes and dxcc in self.sat:
@@ -110,18 +113,20 @@ def missing_entities_csv(d):
 def missing_slots_rows(d):
     rows = []
     for e in d.reference.current:
-        if MIXED not in d.credits.get(e.dxcc, ()):
-            continue
         need = d.needs_of(e.dxcc)
         if not need:
             continue
+        new = MIXED not in d.credits.get(e.dxcc, ())
         rows.append([e.dxcc, e.prefix, e.lotw_name, len([c for c in need if c != SAT])]
-                    + [d.slot_state(e.dxcc, c) if c in need else "" for c in d.columns])
+                    + [d.slot_state(e.dxcc, c) if c in need else "" for c in d.columns]
+                    + ["Yes" if new else ""])
     return rows
 
 
 def missing_slots_header(d):
-    return ["DXCC", "Prefix", "Entity", "Slots needed"] + [_label(c) for c in d.columns]
+    # "Never confirmed" is last so earlier column positions stay as they were.
+    return (["DXCC", "Prefix", "Entity", "Slots needed"] + [_label(c) for c in d.columns]
+            + ["Never confirmed"])
 
 
 def missing_slots_csv(d):
@@ -205,7 +210,9 @@ def workbook(d):
         ("Current entities", s.entities_current),
         ("Entities credited (Mixed)", s.entities_credited),
         ("Never credited", s.entities_missing),
-        ("Missing band and mode slots", s.slots_missing),
+        ("Band and mode slots needed (award view)", s.slots_missing + s.slots_missing_new),
+        ("  on credited entities", s.slots_missing),
+        ("  on never-credited entities", s.slots_missing_new),
         ("Complete in profile", s.complete),
         ("One slot away", s.one_slot_away),
     ]
@@ -238,8 +245,10 @@ def workbook(d):
             ents = [x for x, need in d.needed.items() if c in need]
         marked = sum(1 for x in ents if (x, c) in d.marks and d.marks[(x, c)].state == "awaiting")
         carded = sum(1 for x in ents if (x, c) in d.card_slots)
-        by.append([_label(c), len(ents), marked, carded])
-    sheet("By Band", ["Band or mode", "Entities missing", "Awaiting credit", "Paper card"], by)
+        new = sum(1 for x in ents if MIXED not in d.credits.get(x, ()))
+        by.append([_label(c), len(ents), len(ents) - new, new, marked, carded])
+    sheet("By Band", ["Band or mode", "Entities needed", "On credited entities",
+                      "Never confirmed", "Awaiting credit", "Paper card"], by)
 
     # Matrix: every current entity, all 16 matrix columns, X = credited
     mrows = []

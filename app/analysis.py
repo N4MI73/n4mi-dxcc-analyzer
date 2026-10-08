@@ -13,6 +13,11 @@ Definitions (confirmed by Dan, 2026-10-05, assumption A1):
     profile does not affect this list.
   * Needed slot: for an entity that has a Mixed credit, any profile band or
     mode without a credit.
+  * Award view (D51, Dan 2026-10-08): the Band Slots tiles, chase lists and
+    Full Matrix also count never-credited entities, which need every profile
+    band and mode. That matches LoTW's per-category counts (Digital needed =
+    current entities - Digital credits). needed_slots(include_new=True) gives
+    this; the summary keeps the two parts separate.
 """
 
 from collections import Counter
@@ -34,10 +39,13 @@ def missing_entities(credits, reference):
     return [e for e in reference.current if MIXED not in credits.get(e.dxcc, ())]
 
 
-def needed_slots(credits, reference, profile):
+def needed_slots(credits, reference, profile, include_new=False):
     """{dxcc: [category, ...]} for credited entities missing profile band or
     mode slots. Satellite is not included: it is a separate award (D43), so
     its needs come from satellite_needs() instead.
+
+    With include_new, never-credited entities are included too (they need
+    every profile band and mode) — the award view, D51.
 
     Entities with every such slot credited are omitted.
     """
@@ -45,7 +53,7 @@ def needed_slots(credits, reference, profile):
     out = {}
     for e in reference.current:
         cats = credits.get(e.dxcc, frozenset())
-        if MIXED not in cats:
+        if MIXED not in cats and not include_new:
             continue
         need = [c for c in slots if c not in cats]
         if need:
@@ -85,11 +93,13 @@ class Summary:
     complete: int          # credited entities with every band/mode profile slot credited
     one_slot_away: int     # credited entities missing exactly one band/mode profile slot
     slots_missing: int     # band/mode slots on credited entities (Satellite excluded)
+    slots_missing_new: int = 0   # band/mode slots on never-credited entities (D51)
     satellite_missing: int | None = None   # D44; None unless Satellite is in the profile
 
 
 def summarize(credits, reference, profile):
     needed = needed_slots(credits, reference, profile)
+    every = needed_slots(credits, reference, profile, include_new=True)
     credited = sum(1 for e in reference.current if MIXED in credits.get(e.dxcc, ()))
     return Summary(
         entities_current=len(reference.current),
@@ -98,6 +108,7 @@ def summarize(credits, reference, profile):
         complete=credited - len(needed),
         one_slot_away=sum(1 for v in needed.values() if len(v) == 1),
         slots_missing=sum(len(v) for v in needed.values()),
+        slots_missing_new=sum(len(v) for d, v in every.items() if d not in needed),
         satellite_missing=(len(satellite_needs(credits, reference, profile))
                            if SAT in profile.modes else None),
     )

@@ -1,8 +1,10 @@
 // Missing Band Slots: one tile per band/mode in the profile; pick one to see
-// its chase list (credited entities still needing that slot), by continent.
+// its chase list, by continent. Award view (D51): every current entity that
+// still needs the slot, including never-confirmed entities (tagged NEW), so the
+// counts match LoTW's per-band and per-mode totals.
 'use strict';
 
-const state = { data: null, marks: [], sel: null, sort: 'fewest', group: 'continent', hideMarked: false };
+const state = { data: null, marks: [], sel: null, sort: 'fewest', group: 'continent', hideMarked: false, hideNew: false };
 
 const byName = (a, b) => a.name.localeCompare(b.name);
 const rankKey = (e, easiest) => (e.mw_rank == null ? 1e6 : easiest ? -e.mw_rank : e.mw_rank);
@@ -24,6 +26,7 @@ function render() {
 
   let list = cur.entities.slice();
   if (state.hideMarked) list = list.filter((e) => !marked(e, cur.category));
+  if (state.hideNew && !isSat) list = list.filter((e) => !e.new);
   list.sort(SORTS[state.sort][1]);
   const groups = state.group === 'continent'
     ? CONTINENTS.map(([c, name]) => ({ name, items: list.filter((e) => e.continent === c) })).filter((g) => g.items.length)
@@ -33,20 +36,22 @@ function render() {
     // Satellite is a separate award, so "other needs" (band/mode slots) don't apply.
     const others = isSat ? '' : e.slots_needed <= 1 ? '<span class="ot" title="This is its last missing slot">Done</span>'
       : `<span class="ot" title="Other slots this entity still needs in your profile">+${e.slots_needed - 1}</span>`;
-    return `<button type="button" class="ent click" data-dxcc="${e.dxcc}" title="Mark this slot"><div class="px">${esc(e.prefix || '—')}</div><div class="nm">${esc(e.name)}</div>${slotTags(e, cur.category)}${others}</button>`;
+    return `<button type="button" class="ent click" data-dxcc="${e.dxcc}" title="Mark this slot"><div class="px">${esc(e.prefix || '—')}</div><div class="nm">${esc(e.name)}</div>${!isSat && e.new ? '<span class="tag new" title="Never confirmed: needs every band and mode in your profile">NEW</span>' : ''}${slotTags(e, cur.category)}${others}</button>`;
   };
 
   document.getElementById('main').innerHTML = `
     <section aria-labelledby="pick-h" style="display:flex;flex-direction:column;gap:14px">
       <div class="head"><h2 id="pick-h">What's needed on each band or mode</h2>
-        <div class="muted small">Credited entities still missing each slot · pick one to see the chase list</div></div>
+        <div class="muted small">Every current entity still missing each slot, as LoTW counts it · pick one to see the chase list</div></div>
       <div class="tiles noprint">${cats.map((c) => {
         const pendN = c.entities.filter((e) => (e.marks[c.category] || {}).state === 'awaiting').length;
         const cardN = c.entities.filter((e) => (e.cards[c.category] || []).length).length;
+        const split = c.category === 'SAT' ? '' : c.new_count ? `${c.confirmed_count} + ${c.new_count} new` : '';
         const pend = [pendN && `${pendN} awaiting`, cardN && `${cardN} card${cardN > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
         return `<button type="button" class="tile" data-cat="${c.category}" aria-pressed="${c.category === state.sel}">
           <span class="l" title="${esc(label(c.category))}">${esc(c.category === 'SAT' ? 'SAT' : label(c.category))}</span><span class="c">${c.entities.length}</span>
           <span class="bar"><span style="width:${Math.round(c.entities.length / max * 100)}%"></span></span>
+          <span class="p" title="On confirmed entities + on never-confirmed entities">${split || '&nbsp;'}</span>
           <span class="p">${pend || '&nbsp;'}</span></button>`;
       }).join('')}</div>
     </section>
@@ -60,6 +65,7 @@ function render() {
             <option value="continent"${state.group === 'continent' ? ' selected' : ''}>By continent</option>
             <option value="list"${state.group === 'list' ? ' selected' : ''}>One list</option></select></label>
           <label class="chk"><input type="checkbox" id="hide"${state.hideMarked ? ' checked' : ''}> Hide slots awaiting credit</label>
+          ${isSat ? '' : `<label class="chk"><input type="checkbox" id="hidenew"${state.hideNew ? ' checked' : ''}> Hide never-confirmed entities</label>`}
         </div>
       </div>
       ${isSat ? '<div class="muted small">Satellite DXCC is a separate award: this list covers every current entity without Satellite credit, whether or not you have it on other bands and modes.</div>' : ''}
@@ -67,7 +73,7 @@ function render() {
         ${groups.map((g) => `<div class="group"><div class="gh"><span>${esc(g.name)}</span><span class="n">${g.items.length}</span></div>
           ${g.items.map(row).join('')}</div>`).join('') || '<div class="muted">Nothing needed here. Nice work.</div>'}
       </div>
-      ${isSat ? '' : '<div class="muted small">“+N” = other slots that entity still needs in your profile. “Done” means this is its last missing slot.</div>'}
+      ${isSat ? '' : '<div class="muted small">“+N” = other slots that entity still needs in your profile. “Done” means this is its last missing slot. NEW = never confirmed, so it needs every band and mode.</div>'}
       <div class="muted small noprint">Select an entity to mark its ${esc(label(cur.category))} slot as awaiting credit or won't submit.</div>
     </section>
     ${marksPanel()}`;
@@ -78,9 +84,11 @@ function render() {
   document.getElementById('sort').onchange = (e) => { state.sort = e.target.value; render(); };
   document.getElementById('group').onchange = (e) => { state.group = e.target.value; render(); };
   document.getElementById('hide').onchange = (e) => { state.hideMarked = e.target.checked; render(); };
+  const hn = document.getElementById('hidenew');
+  if (hn) hn.onchange = (e) => { state.hideNew = e.target.checked; render(); };
   document.querySelectorAll('.ent.click').forEach((b) => (b.onclick = () => {
     const ent = cur.entities.find((e) => e.dxcc === +b.dataset.dxcc);
-    openMarkMenu(ent, cur.category, load);
+    openMarkMenu(ent, state.data.profile, load, cur.category);
   }));
 }
 
@@ -113,7 +121,7 @@ async function load() {
     const s = data.summary;
     renderChrome({
       title: `${data.callsign || 'DXCC'} · Missing band slots`,
-      subtitle: `${num(s.slots_missing)} slots on ${s.entities_credited} credited entities · ${esc(profileText(data.profile))}`,
+      subtitle: `${num(s.slots_missing + s.slots_missing_new)} slots needed · ${num(s.slots_missing)} on credited entities, ${num(s.slots_missing_new)} on never-confirmed · ${esc(profileText(data.profile))}`,
       actions: '<a class="btn primary" href="/import">Paste new matrix</a>' + EXPORT_MENU + '<button class="btn" onclick="window.print()">Print</button>',
     });
     render();

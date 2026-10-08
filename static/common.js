@@ -109,10 +109,14 @@ const NO_DATA_HTML = `<div class="panel empty"><h2>No import yet</h2>
   <p class="muted">Paste your LoTW Award Credit Matrix to see what you still need.</p>
   <a class="btn primary" href="/import">Import the matrix</a></div>`;
 
-// ---------- Pending-mark menu (approved Marks mockup) ----------
-// One dialog shared by Missing Entities, Missing Band Slots and Full Matrix.
-// ent: {dxcc, name, marks}; cat: category code; onDone: reload callback.
-function openMarkMenu(ent, cat, onDone) {
+// ---------- Pending-mark menu (D51: "slots in one go") ----------
+// One QSO is credited to its band AND its mode, plus Mixed for a new entity,
+// wherever each is not yet credited. So the menu marks every slot a
+// confirmation covers at once. Used by Missing Entities, Band Slots and the
+// Full Matrix. Credited slots are shown greyed out and can't be marked.
+// ent: {dxcc, name, marks, credited}; profile: {bands, modes};
+// onDone: reload callback; focus: the slot that was clicked (pre-ticked).
+function openMarkMenu(ent, profile, onDone, focus) {
   let dlg = document.getElementById('markdlg');
   if (!dlg) {
     dlg = document.createElement('dialog');
@@ -120,44 +124,72 @@ function openMarkMenu(ent, cat, onDone) {
     dlg.className = 'markdlg';
     document.body.appendChild(dlg);
   }
-  const mark = (ent.marks || {})[cat];
-  const st = mark ? mark.state : 'awaiting';
-  const slot = cat === 'MIXED' ? 'new entity (Mixed)' : label(cat);
-  dlg.innerHTML = `<form method="dialog" class="menu" aria-label="Mark ${esc(ent.name)} ${esc(slot)}">
-    <div><div class="mt">${esc(ent.name)} · ${esc(slot)}</div>
-      <div class="muted small">${mark ? 'Currently marked: ' + (mark.state === 'awaiting' ? 'awaiting credit' : "won't submit") : 'Not marked'}</div></div>
-    <fieldset><legend class="muted small">This slot is confirmed in LoTW and…</legend>
+  const marks = ent.marks || {};
+  const slots = profile.bands.concat(profile.modes);
+  const have = new Set(ent.credited || []);
+  const credited = (c) => have.has(c);
+  const isNew = !have.has('MIXED');
+  const nMarked = Object.keys(marks).length;
+  // Pre-tick: existing marks, the slot clicked, and Mixed for a new entity
+  // being marked for the first time (a new entity's first QSO counts there too).
+  const ticked = (c) => !!marks[c] || c === focus || (c === 'MIXED' && isNew && !nMarked);
+  const first = (focus && marks[focus]) || marks.MIXED || Object.values(marks)[0];
+  const st = first ? first.state : 'awaiting';
+  const note0 = first ? first.note : '';
+  const SHORTL = { CW: 'CW', PHONE: 'Phone', DIGITAL: 'Digital', SAT: 'SAT' };
+  const box = (c) => credited(c)
+    ? `<label title="Already credited"><input type="checkbox" disabled><span class="cr">${esc(SHORTL[c] || c.replace('M', ' m'))}</span></label>`
+    : `<label><input type="checkbox" data-cat="${c}"${ticked(c) ? ' checked' : ''}>${esc(SHORTL[c] || c.replace('M', ' m'))}</label>`;
+  dlg.innerHTML = `<form method="dialog" class="menu" aria-label="Mark ${esc(ent.name)}">
+    <div><div class="mt">${esc(ent.name)}</div>
+      <div class="muted small">${nMarked ? `${nMarked} slot${nMarked > 1 ? 's' : ''} marked` : 'Not marked'} · ${isNew ? 'never confirmed' : 'entity credited; greyed slots are credited'}</div></div>
+    ${isNew ? `<label class="opt"><input type="checkbox" data-cat="MIXED"${ticked('MIXED') ? ' checked' : ''}>
+      <span><b>New entity (Mixed)</b></span></label>` : ''}
+    <fieldset><legend class="muted small">Bands and modes this confirmation covers</legend>
+      <div class="slots">${slots.map(box).join('')}</div></fieldset>
+    <fieldset><legend class="muted small">These slots are confirmed in LoTW and…</legend>
       <label class="opt"><input type="radio" name="st" value="awaiting"${st === 'awaiting' ? ' checked' : ''}>
-        <span><b>Awaiting credit</b><br><span class="muted small">Not yet credited; you'll submit it with your next application</span></span></label>
+        <span><b>Awaiting credit</b><br><span class="muted small">Not yet credited; you'll submit them with your next application</span></span></label>
       <label class="opt"><input type="radio" name="st" value="wont_submit"${st === 'wont_submit' ? ' checked' : ''}>
         <span><b>Won't submit</b><br><span class="muted small">You won't use this QSL for credit, for example an EchoLink contact</span></span></label>
     </fieldset>
     <label class="muted small" for="mk-note">Note (optional)</label>
-    <input id="mk-note" type="text" class="txt" value="${esc(mark ? mark.note : '')}" placeholder="Call worked, mode, date…">
+    <input id="mk-note" type="text" class="txt" value="${esc(note0)}" placeholder="Call worked, mode, date…">
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button type="button" class="btn primary" id="mk-save">Save mark</button>
-      ${mark ? '<button type="button" class="btn" id="mk-clear">Clear mark</button>' : ''}
+      <button type="button" class="btn primary" id="mk-save">Save marks</button>
+      ${nMarked ? '<button type="button" class="btn" id="mk-clear">Clear all</button>' : ''}
       <button type="button" class="btn quiet" id="mk-cancel">Cancel</button>
     </div>
     <div id="mk-msg" role="status" class="small"></div>
-    <div class="muted small">A mark clears itself when an import shows this slot credited.</div>
+    <div class="muted small">Unticking a slot clears its mark. Marks clear themselves when an import shows the slot credited.</div>
   </form>`;
   const msg = (t) => { dlg.querySelector('#mk-msg').innerHTML = `<span class="err">${esc(t)}</span>`; };
-  dlg.querySelector('#mk-cancel').onclick = () => dlg.close();
-  dlg.querySelector('#mk-save').onclick = async () => {
+  const noteEl = dlg.querySelector('#mk-note');
+  let noteEdited = false;
+  noteEl.oninput = () => { noteEdited = true; };
+  const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  // Save every change; report any that failed without hiding the ones that worked.
+  async function apply(want) {
     const state = dlg.querySelector('input[name=st]:checked').value;
-    const note = dlg.querySelector('#mk-note').value.trim();
-    try {
-      if (mark) await api(`/api/marks/${mark.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, note }) });
-      else await postJSON('/api/marks', { dxcc: ent.dxcc, category: cat, state, note });
-      dlg.close(); onDone();
-    } catch (err) { msg(err.message); }
-  };
+    const note = noteEl.value.trim();
+    const errs = [];
+    for (const c of ['MIXED'].concat(slots)) {
+      const m = marks[c];
+      try {
+        if (want.has(c) && !m) await postJSON('/api/marks', { dxcc: ent.dxcc, category: c, state, note });
+        // An untouched note field never overwrites a slot's own note.
+        else if (want.has(c) && (m.state !== state || (noteEdited && m.note !== note)))
+          await api(`/api/marks/${m.id}`, json('PATCH', { state, note: noteEdited ? note : m.note }));
+        else if (!want.has(c) && m) await api(`/api/marks/${m.id}`, { method: 'DELETE' });
+      } catch (err) { errs.push(`${c === 'MIXED' ? 'Mixed' : label(c)}: ${err.message}`); }
+    }
+    if (errs.length) { msg(errs.join(' · ')); onDone(); } else { dlg.close(); onDone(); }
+  }
+  dlg.querySelector('#mk-cancel').onclick = () => dlg.close();
+  dlg.querySelector('#mk-save').onclick = () =>
+    apply(new Set([...dlg.querySelectorAll('input[data-cat]:checked')].map((b) => b.dataset.cat)));
   const clr = dlg.querySelector('#mk-clear');
-  if (clr) clr.onclick = async () => {
-    try { await api(`/api/marks/${mark.id}`, { method: 'DELETE' }); dlg.close(); onDone(); }
-    catch (err) { msg(err.message); }
-  };
+  if (clr) clr.onclick = () => apply(new Set());
   dlg.showModal();
 }
 

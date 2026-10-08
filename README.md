@@ -5,7 +5,7 @@ A small self-hosted app that answers one operating question at a glance: **"What
 It reads the ARRL Logbook of the World (LoTW) **Award Credit Matrix**, which Dan pastes in, and shows:
 
 - entities never credited;
-- credited entities still missing bands or modes in the operating profile (160–6 m with CW, Phone and Digital by default; 2 m and Satellite can be switched on);
+- every band and mode slot still needed in the operating profile (160–6 m with CW, Phone and Digital by default; 2 m and Satellite can be switched on), counted the way LoTW counts them: never-confirmed entities are included and tagged NEW;
 - the full band/mode matrix.
 
 It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker).
@@ -71,7 +71,7 @@ The **Export** button on the list pages offers four files. All follow the operat
 |---|---|
 | `dxcc_analysis_YYYY-MM-DD.xlsx` | Summary, Missing Entities, Missing Slots, By Band, Matrix, Pending Marks, Paper QSLs |
 | `missing_entities.csv` | Never-credited entities with Most Wanted rank, marks and paper cards |
-| `missing_slots.csv` | One row per credited entity with a need; one column per profile band and mode |
+| `missing_slots.csv` | One row per entity with a need (never-confirmed entities flagged in the last column); one column per profile band and mode |
 | `no_confirms.csv` | For DX Monitor: a drop-in replacement for its `no_confirms.csv` (`Entity,Prefix`, no byte-order mark). Copy it to DX Monitor's server folder and restart that container. |
 
 ## Running the tests
