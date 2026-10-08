@@ -57,6 +57,15 @@ class Reference:
         """Entity for a LoTW name and Deleted flag, or None."""
         return self._by_name.get((normalize_name(name), bool(deleted)))
 
+    def name_of(self, dxcc):
+        """Entity name for display; never fails, even if the table lost an entry."""
+        e = self.by_dxcc.get(dxcc)
+        return e.lotw_name if e else f"Unknown DXCC {dxcc}"
+
+    def prefix_of(self, dxcc):
+        e = self.by_dxcc.get(dxcc)
+        return e.prefix if e else "?"
+
     def name_exists(self, name):
         """True if the name exists with either Deleted flag."""
         n = normalize_name(name)

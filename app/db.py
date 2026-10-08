@@ -128,16 +128,23 @@ def current_credits(conn):
     return (credits_of(conn, snap["id"]) if snap else None), snap
 
 
-def store_preview(conn, result, source, held):
+class NotPromotable(Exception):
+    """The snapshot can't become current (anymore); the message says why."""
+
+
+def store_preview(conn, result, source, held, based_on):
     """Store a validated import awaiting Save. Any earlier unsaved preview is
-    discarded, so only one can be pending at a time."""
+    discarded, so only one can be pending at a time.
+
+    `based_on` is the id of the snapshot the import was VALIDATED against
+    (review fix: not whatever is current at the moment of storing), so Save
+    can refuse if the current data has changed since."""
     conn.execute("UPDATE snapshots SET status = 'discarded' WHERE status IN ('preview', 'held')")
-    cur = current_snapshot(conn)
     sid = conn.execute(
         "INSERT INTO snapshots (imported_at, source, callsign, status, based_on, warnings, "
         "totals_json, rows_read) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (now(), source, result.callsign, "held" if held else "preview",
-         cur["id"] if cur else None, json.dumps(result.warnings), json.dumps(result.totals),
+         based_on, json.dumps(result.warnings), json.dumps(result.totals),
          result.rows_read)).lastrowid
     conn.executemany(
         "INSERT INTO snapshot_credits (snapshot_id, dxcc, category) VALUES (?, ?, ?)",
@@ -146,27 +153,52 @@ def store_preview(conn, result, source, held):
     return sid
 
 
-def make_current(conn, sid):
+_ANY = object()
+
+
+def make_current(conn, sid, allowed, expect_current=_ANY):
     """Make a snapshot current; the old current becomes previous.
+
+    All checks and writes happen in ONE locked transaction (BEGIN IMMEDIATE),
+    so two requests at once can't both pass the checks (review fix):
+      * the snapshot's status must still be in `allowed`;
+      * if `expect_current` is given, the current snapshot must still be that
+        one (None = no current data yet).
+    Raises NotPromotable otherwise; nothing is changed.
     Returns (marks_cleared, cards_credited)."""
-    ts = now()
-    conn.execute("UPDATE snapshots SET status = 'previous' WHERE status = 'current'")
-    conn.execute("UPDATE snapshots SET status = 'current', saved_at = COALESCE(saved_at, ?) "
-                 "WHERE id = ?", (ts, sid))
-    credits = credits_of(conn, sid)
-    cleared = 0
-    for mid, mark in active_marks(conn):
-        if mark.category in credits.get(mark.dxcc, ()):
-            conn.execute("UPDATE pending_marks SET cleared_at = ?, cleared_reason = 'credited', "
-                         "cleared_by_snapshot = ? WHERE id = ?", (ts, sid, mid))
-            cleared += 1
-    credited = 0
-    for cid, card in active_cards(conn):
-        if all(c in credits.get(card.dxcc, ()) for c in card.categories):
-            conn.execute("UPDATE paper_qsls SET credited_at = ?, credited_by_snapshot = ? "
-                         "WHERE id = ?", (ts, sid, cid))
-            credited += 1
-    conn.commit()
+    if conn.in_transaction:
+        # Callers must only have READ before calling; an uncommitted write here
+        # would be swept into (or rolled back with) this transaction.
+        raise RuntimeError("make_current() needs a connection with no open transaction")
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        snap = get_snapshot(conn, sid)
+        if snap is None or snap["status"] not in allowed:
+            raise NotPromotable("That import can't be made current. Preview it again.")
+        cur = current_snapshot(conn)
+        if expect_current is not _ANY and (cur["id"] if cur else None) != expect_current:
+            raise NotPromotable("The current data changed since this preview. Preview again.")
+        ts = now()
+        conn.execute("UPDATE snapshots SET status = 'previous' WHERE status = 'current'")
+        conn.execute("UPDATE snapshots SET status = 'current', saved_at = COALESCE(saved_at, ?) "
+                     "WHERE id = ?", (ts, sid))
+        credits = credits_of(conn, sid)
+        cleared = 0
+        for mid, mark in active_marks(conn):
+            if mark.category in credits.get(mark.dxcc, ()):
+                conn.execute("UPDATE pending_marks SET cleared_at = ?, cleared_reason = 'credited', "
+                             "cleared_by_snapshot = ? WHERE id = ?", (ts, sid, mid))
+                cleared += 1
+        credited = 0
+        for cid, card in active_cards(conn):
+            if all(c in credits.get(card.dxcc, ()) for c in card.categories):
+                conn.execute("UPDATE paper_qsls SET credited_at = ?, credited_by_snapshot = ? "
+                             "WHERE id = ?", (ts, sid, cid))
+                credited += 1
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
     return cleared, credited
 
 
@@ -188,7 +220,17 @@ def delete_snapshot(conn, sid):
 
 
 def stored_dxccs(conn):
-    return {r[0] for r in conn.execute("SELECT DISTINCT dxcc FROM snapshot_credits")}
+    """Every DXCC number the database refers to: credits, active marks, cards."""
+    return {r[0] for r in conn.execute(
+        "SELECT dxcc FROM snapshot_credits UNION SELECT dxcc FROM pending_marks "
+        "WHERE cleared_at IS NULL UNION SELECT dxcc FROM paper_qsls WHERE credited_at IS NULL")}
+
+
+def cleared_marks(conn, sid):
+    """Marks that this snapshot's import cleared (shown in the history, spec 5.4)."""
+    return conn.execute("SELECT dxcc, category, state FROM pending_marks "
+                        "WHERE cleared_by_snapshot = ? AND cleared_reason = 'credited' "
+                        "ORDER BY dxcc, category", (sid,)).fetchall()
 
 
 # ---------- settings ----------

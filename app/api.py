@@ -11,7 +11,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import analysis, clublog, db, exports
 from .categories import LABELS, MATRIX_CATEGORIES, MIXED, SAT, Profile
@@ -25,7 +25,14 @@ MAX_UPLOAD = 5 * 1024 * 1024
 router = APIRouter()
 
 
+MAX_PASTE = 2_000_000          # a real matrix paste is about 40 kB
+NOTE, CALL, DATE = 500, 20, 20  # length limits for user-typed fields
+
+
 def get_conn(request: Request):
+    # A database problem found at start-up is reported, not crashed on (spec 12).
+    if request.app.state.db_error:
+        raise HTTPException(503, request.app.state.db_error)
     conn = db.connect(request.app.state.db_path)
     try:
         yield conn
@@ -98,6 +105,8 @@ def healthz():
 
 @router.get("/api/status")
 def status(request: Request):
+    if request.app.state.db_error:
+        return {"ok": False, "error": request.app.state.db_error}
     try:
         conn = db.connect(request.app.state.db_path)
         try:
@@ -131,7 +140,7 @@ def status(request: Request):
 # ---------- import ----------
 
 def _changes_json(ch, reference):
-    name = lambda d: reference.by_dxcc[d].lotw_name  # noqa: E731
+    name = reference.name_of
     return {"new_entities": [{"dxcc": d, "name": name(d)} for d in ch.new_entities],
             "new_slots": [{"dxcc": d, "name": name(d), "category": c} for d, c in ch.new_slots],
             "lost": [{"dxcc": d, "name": name(d), "category": c} for d, c in ch.lost]}
@@ -151,10 +160,12 @@ async def import_preview(request: Request, text: str | None = Form(None),
             raise HTTPException(422, str(exc))
         source = file.filename
     elif text:
+        if len(text) > MAX_PASTE:
+            raise HTTPException(413, "That paste is far larger than a LoTW matrix.")
         parsed, source = parse_text(text), "paste"
     else:
         raise HTTPException(422, "Paste the matrix or choose a file.")
-    current, _ = db.current_credits(conn)
+    current, cur_snap = db.current_credits(conn)
     res = validate(parsed, reference, current)
     out = {"status": res.status, "errors": res.errors, "warnings": res.warnings,
            "callsign": res.callsign, "rows_read": res.rows_read, "id": None}
@@ -168,7 +179,8 @@ async def import_preview(request: Request, text: str | None = Form(None),
                                 if m.category in res.credits.get(m.dxcc, ()))
     out["cards_to_credit"] = sum(1 for _, c in db.active_cards(conn)
                                  if is_credited(c, res.credits))
-    out["id"] = db.store_preview(conn, res, source, held=res.status == HELD)
+    out["id"] = db.store_preview(conn, res, source, held=res.status == HELD,
+                                 based_on=cur_snap["id"] if cur_snap else None)
     return out
 
 
@@ -184,10 +196,11 @@ def import_save(sid: int, body: SaveBody | None = None, conn=Depends(get_conn)):
     if snap["status"] == "held" and not (body and body.save_anyway):
         raise HTTPException(409, "This import was held for review. Check the warnings, then "
                                  "choose Save anyway.")
-    cur = db.current_snapshot(conn)
-    if (cur["id"] if cur else None) != snap["based_on"]:
-        raise HTTPException(409, "The current data changed since this preview. Preview again.")
-    cleared, credited = db.make_current(conn, sid)
+    try:
+        cleared, credited = db.make_current(conn, sid, allowed=db.PENDING,
+                                            expect_current=snap["based_on"])
+    except db.NotPromotable as exc:
+        raise HTTPException(409, str(exc))
     return {"saved": sid, "marks_cleared": cleared, "cards_credited": credited}
 
 
@@ -200,8 +213,18 @@ def import_discard(sid: int, conn=Depends(get_conn)):
 # ---------- history and rollback ----------
 
 @router.get("/api/snapshots")
-def snapshots(conn=Depends(get_conn)):
-    return {"snapshots": [_snapshot_json(s) for s in db.list_snapshots(conn)]}
+def snapshots(request: Request, conn=Depends(get_conn)):
+    reference = ref(request)
+    out = []
+    for s in db.list_snapshots(conn):
+        j = _snapshot_json(s)
+        # Marks this import cleared (spec 5.4): a rollback doesn't restore them,
+        # so the history shows them for re-marking if needed.
+        j["cleared_marks"] = [{"name": reference.name_of(r["dxcc"]), "category": r["category"],
+                               "label": LABELS.get(r["category"], r["category"])}
+                              for r in db.cleared_marks(conn, s["id"])]
+        out.append(j)
+    return {"snapshots": out}
 
 
 @router.post("/api/snapshots/{sid}/make-current")
@@ -209,7 +232,10 @@ def snapshot_make_current(sid: int, conn=Depends(get_conn)):
     snap = db.get_snapshot(conn, sid)
     if snap is None or snap["status"] != "previous":
         raise HTTPException(409, "Only an earlier saved import can be made current.")
-    cleared, credited = db.make_current(conn, sid)
+    try:
+        cleared, credited = db.make_current(conn, sid, allowed=("previous",))
+    except db.NotPromotable as exc:
+        raise HTTPException(409, str(exc))
     return {"current": sid, "marks_cleared": cleared, "cards_credited": credited}
 
 
@@ -334,21 +360,21 @@ def put_profile(body: ProfileBody, conn=Depends(get_conn)):
 
 class MarkBody(BaseModel):
     dxcc: int
-    category: str
-    state: str
-    note: str = ""
+    category: str = Field(max_length=10)
+    state: str = Field(max_length=20)
+    note: str = Field("", max_length=NOTE)
 
 
 class MarkPatch(BaseModel):
-    state: str
-    note: str = ""
+    state: str = Field(max_length=20)
+    note: str = Field("", max_length=NOTE)
 
 
 @router.get("/api/marks")
 def list_marks(request: Request, conn=Depends(get_conn)):
-    by = ref(request).by_dxcc
-    return {"marks": [{"id": i, **m.__dict__, "name": by[m.dxcc].lotw_name,
-                       "prefix": by[m.dxcc].prefix} for i, m in db.active_marks(conn)]}
+    reference = ref(request)
+    return {"marks": [{"id": i, **m.__dict__, "name": reference.name_of(m.dxcc),
+                       "prefix": reference.prefix_of(m.dxcc)} for i, m in db.active_marks(conn)]}
 
 
 @router.post("/api/marks")
@@ -387,22 +413,22 @@ def delete_mark(mid: int, conn=Depends(get_conn)):
 
 class CardBody(BaseModel):
     dxcc: int
-    band: str | None = None
-    mode: str
-    state: str = "in_hand"
-    call: str = ""
-    qso_date: str = ""
-    note: str = ""
+    band: str | None = Field(None, max_length=10)
+    mode: str = Field(max_length=10)
+    state: str = Field("in_hand", max_length=20)
+    call: str = Field("", max_length=CALL)
+    qso_date: str = Field("", max_length=DATE)
+    note: str = Field("", max_length=NOTE)
 
 
 class CardPatch(BaseModel):
-    state: str
-    note: str = ""
+    state: str = Field(max_length=20)
+    note: str = Field("", max_length=NOTE)
 
 
 def _card_json(cid, c, credits, profile, reference):
-    return {"id": cid, **c.__dict__, "name": reference.by_dxcc[c.dxcc].lotw_name,
-            "prefix": reference.by_dxcc[c.dxcc].prefix,
+    return {"id": cid, **c.__dict__, "name": reference.name_of(c.dxcc),
+            "prefix": reference.prefix_of(c.dxcc),
             "fills": fills_in_profile(c, credits, profile)}
 
 
@@ -452,7 +478,7 @@ def delete_card(cid: int, conn=Depends(get_conn)):
 # ---------- Account Status cross-check ----------
 
 class TextBody(BaseModel):
-    text: str
+    text: str = Field(max_length=200_000)
 
 
 @router.post("/api/status-check")

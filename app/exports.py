@@ -22,6 +22,16 @@ from .categories import LABELS, MATRIX_CATEGORIES, MIXED, SAT
 from .paper import fills_in_profile
 
 MARK_TEXT = {"awaiting": "Awaiting", "wont_submit": "Won't submit"}
+
+
+def user_text(value):
+    """Text the user typed (notes, calls, dates) as a plain-text cell.
+
+    Spreadsheets treat a cell starting with = + - @ (or a tab/CR) as a formula.
+    A leading apostrophe keeps it as text in both the CSV and the workbook
+    (review fix: a note like "=HYPERLINK(...)" must never become live)."""
+    v = "" if value is None else str(value)
+    return "'" + v if v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
 CARD_TEXT = {"in_hand": "In hand", "submitted": "Submitted"}
 CONTINENT = {"AF": "Africa", "AS": "Asia", "OC": "Oceania", "EU": "Europe",
              "SA": "South America", "NA": "North America", "AN": "Antarctica"}
@@ -84,7 +94,7 @@ def missing_entities_rows(d):
         cards = d.card_slots.get((e.dxcc, MIXED), [])
         rows.append([e.dxcc, e.prefix, e.lotw_name, CONTINENT.get(e.continent, e.continent),
                      e.cq_zone or "", d.rankings.get(e.dxcc, ""),
-                     MARK_TEXT[m.state] if m else "", m.note if m else "",
+                     MARK_TEXT[m.state] if m else "", user_text(m.note) if m else "",
                      ", ".join(CARD_TEXT[s] for s in cards)])
     return rows
 
@@ -159,6 +169,15 @@ def workbook(d):
             longest = max([len(str(h))] + [len(str(r[i - 1])) for r in rows])
             w = (widths or {}).get(h) or max(8, min(40, longest + 2))
             ws.column_dimensions[get_column_letter(i)].width = w
+        # User text was marked with a leading apostrophe by user_text(). In the
+        # workbook, store the original text as a TEXT cell instead, so it reads
+        # exactly as typed and can never run as a formula.
+        for row in ws.iter_rows(min_row=2):
+            for c in row:
+                v = c.value
+                if isinstance(v, str) and len(v) > 1 and v[0] == "'" and v[1] in "=+-@\t\r":
+                    c.value = v[1:]
+                    c.data_type = "s"
         if fills:
             for row in ws.iter_rows(min_row=2):
                 for c in row:
@@ -230,17 +249,17 @@ def workbook(d):
     sheet("Matrix", ["DXCC", "Prefix", "Entity"] + [_label(c) for c in MATRIX_CATEGORIES], mrows,
           widths={_label(c): 8 for c in MATRIX_CATEGORIES})
 
-    by_dxcc = d.reference.by_dxcc
-    prows = [[m.dxcc, by_dxcc[m.dxcc].prefix, by_dxcc[m.dxcc].lotw_name,
+    name, prefix = d.reference.name_of, d.reference.prefix_of
+    prows = [[m.dxcc, prefix(m.dxcc), name(m.dxcc),
               "New entity (Mixed)" if m.category == MIXED else _label(m.category),
-              MARK_TEXT[m.state], m.note] for m in d.marks.values()]
+              MARK_TEXT[m.state], user_text(m.note)] for m in d.marks.values()]
     prows.sort(key=lambda r: (r[2], r[3]))
     sheet("Pending Marks", ["DXCC", "Prefix", "Entity", "Slot", "Mark", "Note"], prows)
 
-    crows = [[c.dxcc, by_dxcc[c.dxcc].prefix, by_dxcc[c.dxcc].lotw_name,
+    crows = [[c.dxcc, prefix(c.dxcc), name(c.dxcc),
               _label(c.band) if c.band else "", _label(c.mode), CARD_TEXT[c.state],
               ", ".join(_label(x) for x in fills_in_profile(c, d.credits, d.profile)) or "outside profile",
-              c.call, c.qso_date, c.note] for c in d.cards]
+              user_text(c.call), user_text(c.qso_date), user_text(c.note)] for c in d.cards]
     sheet("Paper QSLs", ["DXCC", "Prefix", "Entity", "Band", "Mode", "Status", "Fills",
                          "Call", "QSO date", "Note"], crows)
 

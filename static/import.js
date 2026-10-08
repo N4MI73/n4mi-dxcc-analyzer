@@ -116,7 +116,9 @@ function savedView(r, p) {
 function historyView() {
   const items = state.history.map((h) => {
     const t = h.totals || {};
-    const detail = `${esc(h.source === 'paste' ? 'Pasted' : h.source)} · Mixed ${t.MIXED ?? '—'}${h.callsign ? ' · ' + esc(h.callsign) : ''}`;
+    const cm = h.cleared_marks || [];
+    const detail = `${esc(h.source === 'paste' ? 'Pasted' : h.source)} · Mixed ${t.MIXED ?? '—'}${h.callsign ? ' · ' + esc(h.callsign) : ''}`
+      + (cm.length ? `<br>Cleared ${cm.length} mark${cm.length === 1 ? '' : 's'}: ${cm.map((m) => `${esc(m.name)} (${esc(m.category === 'MIXED' ? 'new entity' : m.label)})`).join(', ')}` : '');
     const canAct = h.status === 'previous';
     const conf = state.deleting === h.id;
     return `<div class="hist">

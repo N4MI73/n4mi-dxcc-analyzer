@@ -1,0 +1,25 @@
+# N4MI DXCC Analyzer — Portainer stack (Repository build method).
+#
+# Portainer: Stacks → Add stack → Repository
+#   Repository URL:    https://github.com/N4MI73/n4mi-dxcc-analyzer
+#   Repository reference: refs/heads/main
+#   Compose path:      docker-compose.yml
+#   Authentication off · GitOps auto-updates off ("Pull and redeploy" by hand)
+#   Environment variables: none (Phase 1 stores no credentials)
+#
+# Before the first deploy, create the data folder in UGOS Files:
+#   /volume2/docker/n4mi-dxcc-analyzer/data
+services:
+  n4mi-dxcc-analyzer:
+    build: .
+    pull_policy: build            # Portainer's "Pull and redeploy" rebuilds from the repo
+    container_name: n4mi-dxcc-analyzer
+    ports:
+      - "8086:8086"
+    environment:
+      - DATA_DIR=/app/data        # must match the mount below; missing mount = clear error
+    volumes:
+      # Bind mount on the NAS (D31): visible in UGOS Files, and bind-mounted
+      # data survived the 2026-06 Docker wipe. Holds dxcc.db only.
+      - /volume2/docker/n4mi-dxcc-analyzer/data:/app/data
+    restart: unless-stopped

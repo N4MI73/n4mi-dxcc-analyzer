@@ -197,12 +197,23 @@ def parse_text(text):
     return parse_cells((i + 1, ln.split("\t")) for i, ln in enumerate(lines))
 
 
+def _decode(data):
+    """UTF-8 (with or without BOM), else Windows-1252; otherwise a clear error."""
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    raise UploadError("The file isn't readable text. Copy the matrix from LoTW again, or "
+                      "save the file from Notepad as UTF-8.")
+
+
 def parse_csv_bytes(data):
+    text = _decode(data)
     try:
-        text = data.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = data.decode("cp1252")
-    reader = csv.reader(io.StringIO(text))
+        reader = list(csv.reader(io.StringIO(text)))
+    except csv.Error as exc:
+        raise UploadError(f"The CSV file couldn't be read: {exc}") from exc
     return parse_cells((i + 1, row) for i, row in enumerate(reader))
 
 
@@ -212,9 +223,13 @@ def parse_xlsx_bytes(data):
         wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     except Exception as exc:  # corrupt or not really a workbook
         raise UploadError(f"Could not open the spreadsheet: {exc}") from exc
-    ws = wb.worksheets[0]
-    rows = [(i + 1, list(r)) for i, r in enumerate(ws.iter_rows(values_only=True))]
-    wb.close()
+    try:
+        ws = wb.worksheets[0]
+        rows = [(i + 1, list(r)) for i, r in enumerate(ws.iter_rows(values_only=True))]
+    except Exception as exc:  # opens, but fails while reading
+        raise UploadError(f"Could not read the spreadsheet: {exc}") from exc
+    finally:
+        wb.close()
     return parse_cells(rows)
 
 
@@ -226,8 +241,5 @@ def parse_upload(filename, data):
     if name.endswith(".csv"):
         return parse_csv_bytes(data)
     if name.endswith((".txt", ".tsv")):
-        try:
-            return parse_text(data.decode("utf-8-sig"))
-        except UnicodeDecodeError:
-            return parse_text(data.decode("cp1252"))
+        return parse_text(_decode(data))
     raise UploadError("Unsupported file type. Use .txt, .csv or .xlsx.")

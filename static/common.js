@@ -66,7 +66,22 @@ function renderChrome({ title, subtitle, actions = '' }) {
       ${PAGES.map(([href, name]) => href
         ? `<a href="${href}"${href === here ? ' aria-current="page"' : ''}>${name}</a>`
         : `<span title="Coming in the next build step">${name}</span>`).join('')}
-    </nav>`;
+    </nav>
+    <div id="health" role="alert"></div>`;
+  checkHealth();
+}
+
+// Every page shows a plain warning when the app reports a problem: an
+// unreadable database, a missing data folder, or stored data the entity table
+// doesn't know (spec section 12).
+async function checkHealth() {
+  try {
+    const st = await (await fetch('/api/status')).json();
+    if (!st.ok && st.error) {
+      document.getElementById('health').innerHTML =
+        `<div class="notice bad" style="margin-top:16px"><div><div class="t">Problem</div><div>${esc(st.error)}</div></div></div>`;
+    }
+  } catch (e) { /* the page's own request will show the error */ }
 }
 
 const CARD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h6M7 14h4"/></svg>';

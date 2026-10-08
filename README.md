@@ -12,7 +12,7 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 
 ## Status
 
-**Phase 1, Build Step 2b complete: core logic, storage, the internal API, all six pages and the exports.** Docker deployment comes next. What exists:
+**Phase 1, Build Step 3: ready to deploy on the UGreen NAS** (Docker, Portainer, port 8086). What exists:
 
 | File | What it does |
 |---|---|
@@ -40,6 +40,19 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 - **Bands and modes are credited separately**, as ARRL does. Band-and-mode combinations are not slots.
 - **Deleted entities are excluded** from every count.
 - **A failed import changes nothing**, and a suspicious one needs a deliberate "Save anyway".
+
+## Deploying on the NAS (Portainer)
+
+1. In UGOS Files, create the folder `/volume2/docker/n4mi-dxcc-analyzer/data`. It holds the database (`dxcc.db`) and nothing else.
+2. Portainer → **Stacks → Add stack → Repository**:
+   - Repository URL `https://github.com/N4MI73/n4mi-dxcc-analyzer`, reference `refs/heads/main`, compose path `docker-compose.yml`
+   - Authentication off; GitOps auto-updates off; no environment variables (no credentials in Phase 1)
+3. Deploy. Check `http://192.168.6.29:8086/healthz` answers `{"status":"ok"}` and `http://192.168.6.29:8086/api/status` shows `"ok":true`.
+4. Uptime Kuma: an HTTP monitor on `/healthz` (is the app up?) and a Keyword monitor on `/api/status` for `"ok":true` (is the database readable and the data folder mounted?).
+
+**Updating:** commit and push, then Portainer → the stack → **Pull and redeploy** (`pull_policy: build` rebuilds from the repo).
+
+**If the data folder isn't mounted**, every page shows "Data folder /app/data not found" instead of quietly starting with an empty database. **Losing the folder** costs only history: one fresh LoTW paste restores current credits; import history, pending marks and paper cards would be lost, so copy `dxcc.db` now and then (best with the stack stopped).
 
 ## Running locally
 
