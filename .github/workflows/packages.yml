@@ -1,0 +1,72 @@
+name: packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - "packaging/**"
+      - "install.sh"
+      - "app/version.py"
+      - ".github/workflows/packages.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: System deps (rpm, fuse)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm libfuse2
+
+      - name: Install appimagetool
+        run: |
+          curl -fsSL -o /tmp/appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool
+          # run once to allow --appimage-extract on runners without FUSE
+          /tmp/appimagetool --appimage-extract >/dev/null 2>&1 || true
+          sudo mv /tmp/appimagetool /usr/local/bin/appimagetool
+          appimagetool --version || squashfs-root/AppRun --version || true
+
+      - name: Show version
+        run: python3 -c "from app.version import VERSION; print(VERSION)"
+
+      - name: Run tests
+        run: |
+          pip install -r requirements-dev.txt
+          python -m pytest -q
+
+      - name: Build .deb
+        run: bash packaging/build-deb.sh --output-dir dist
+
+      - name: Build .rpm
+        run: bash packaging/build-rpm.sh --output-dir dist
+
+      - name: Build .AppImage
+        run: |
+          export PATH="/usr/local/bin:$PATH"
+          # appimagetool on CI without FUSE: use extracted binary if needed
+          if [ -d squashfs-root ]; then export PATH="$PWD/squashfs-root:$PATH"; fi
+          bash packaging/build-appimage.sh --output-dir dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: dist/*
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

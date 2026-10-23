@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=N4MI DXCC Analyzer
+Comment=What do I still need for DXCC on the bands and modes I actually work?
+Exec=n4mi-dxcc-analyzer
+Icon=n4mi-dxcc-analyzer
+Terminal=false
+Categories=HamRadio;Network;Education;
+StartupNotify=false

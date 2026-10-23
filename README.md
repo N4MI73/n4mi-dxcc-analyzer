@@ -12,6 +12,49 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 
 **How to use it:** see the [User Guide](User_Guide.md), including how to use it together with [DX Monitor](https://github.com/N4MI73/n4mi-dx-monitor).
 
+## Install on Linux (native packages)
+
+One-liner (Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE — installs from the
+latest GitHub Release when possible, otherwise from source):
+
+```
+curl -fsSL https://raw.githubusercontent.com/N4MI73/n4mi-dxcc-analyzer/main/install.sh | sudo bash
+```
+
+What you get: the app in `/opt/n4mi-dxcc-analyzer` (Python venv), a
+`n4mi-dxcc-analyzer` systemd service on port 8086, data (SQLite `dxcc.db`)
+in `/var/lib/n4mi-dxcc-analyzer`. Open `http://<this-host>:8086/`;
+`/healthz` answers `{"status":"ok"}`.
+
+| Format | Who it is for | Install |
+|---|---|---|
+| `.deb` | Debian, Ubuntu, Mint, Pop!_OS, Raspberry Pi OS | Download `n4mi-dxcc-analyzer_<version>_all.deb` from [Releases](https://github.com/N4MI73/n4mi-dxcc-analyzer/releases), then `sudo apt install ./n4mi-dxcc-analyzer_*_all.deb` |
+| `.rpm` | Fedora, RHEL/Rocky/Alma, openSUSE | Download `n4mi-dxcc-analyzer-<version>-1.noarch.rpm` from [Releases](https://github.com/N4MI73/n4mi-dxcc-analyzer/releases), then `sudo dnf install ./n4mi-dxcc-analyzer-*.rpm` |
+| `.AppImage` | Any distro, no root, try-before-you-install | Download `N4MI-DXCC-Analyzer-<version>-x86_64.AppImage` from [Releases](https://github.com/N4MI73/n4mi-dxcc-analyzer/releases), `chmod +x`, run it (first run creates `~/.local/share/n4mi-dxcc-analyzer/{venv,data}` and opens the browser) |
+
+Packages are built by [`packaging/`](packaging/) (`build-deb.sh`,
+`build-rpm.sh`, `build-appimage.sh`; version comes from `app/version.py`) and
+by [`.github/workflows/packages.yml`](.github/workflows/packages.yml) on every
+`v*` tag. To build locally: `bash packaging/build-deb.sh`, same for rpm and
+AppImage; output goes to `dist/`.
+
+Useful `install.sh` forms:
+
+```
+sudo bash install.sh --from-source                 # skip release lookup
+sudo bash install.sh --port 8090                    # non-default port
+sudo bash install.sh --deb ./n4mi-dxcc-analyzer_1.3.0_all.deb
+sudo bash install.sh --rpm ./n4mi-dxcc-analyzer-1.3.0-1.noarch.rpm
+sudo bash install.sh --appimage ./N4MI-DXCC-Analyzer-1.3.0-x86_64.AppImage
+sudo bash install.sh --uninstall                    # keep data
+sudo bash install.sh --uninstall --purge            # also delete /var/lib/n4mi-dxcc-analyzer
+```
+
+Uninstall for packages: `sudo apt remove n4mi-dxcc-analyzer`
+(`purge` deletes the data dir), `sudo dnf remove n4mi-dxcc-analyzer`, or just
+delete the AppImage. Service logs: `journalctl -u n4mi-dxcc-analyzer -e`.
+Docker/NAS deployment below is unchanged and still supported.
+
 ## Status
 
 **v1.0 released 2026-10-13; current release v1.3.0.** Deployed on the UGreen NAS (Docker, Portainer, port 8086). Since v1.0: DXpedition tags from DX Monitor, the Suggestions page for DX Monitor's Needed list, the user guide, the security review fixes, and the in-app Help page. The version running is shown beside the app's name on every page. What's in the repository:

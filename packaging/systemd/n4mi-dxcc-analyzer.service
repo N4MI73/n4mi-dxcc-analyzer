@@ -1,0 +1,25 @@
+[Unit]
+Description=N4MI DXCC Analyzer - what do I still need for DXCC?
+Documentation=https://github.com/N4MI73/n4mi-dxcc-analyzer
+After=network.target
+
+[Service]
+Type=simple
+User=n4mi-dxcc
+Group=n4mi-dxcc
+WorkingDirectory=/opt/n4mi-dxcc-analyzer
+Environment=DATA_DIR=/var/lib/n4mi-dxcc-analyzer
+Environment=PORT=8086
+Environment=HOST=0.0.0.0
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/n4mi-dxcc-analyzer
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/n4mi-dxcc-analyzer
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

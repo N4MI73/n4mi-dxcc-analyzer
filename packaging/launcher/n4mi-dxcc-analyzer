@@ -1,0 +1,27 @@
+#!/bin/sh
+# n4mi-dxcc-analyzer launcher (installed as /usr/bin/n4mi-dxcc-analyzer by the
+# .deb/.rpm, and used by the systemd unit).
+# Env overrides: DATA_DIR, PORT, HOST.
+set -eu
+APP_DIR="/opt/n4mi-dxcc-analyzer"
+DATA_DIR="${DATA_DIR:-/var/lib/n4mi-dxcc-analyzer}"
+PORT="${PORT:-8086}"
+HOST="${HOST:-0.0.0.0}"
+VENV_PY="$APP_DIR/venv/bin/python"
+
+if [ ! -x "$VENV_PY" ]; then
+  echo "n4mi-dxcc-analyzer: venv not found at $VENV_PY" >&2
+  echo "Reinstall the package, or run: sudo python3 -m venv $APP_DIR/venv && sudo $APP_DIR/venv/bin/pip install -r $APP_DIR/requirements.txt" >&2
+  exit 1
+fi
+
+# DATA_DIR behaviour matches app/main.py: the directory must exist (Docker
+# relies on the mount check; native installs create/chown it in postinst).
+if [ ! -d "$DATA_DIR" ]; then
+  echo "n4mi-dxcc-analyzer: data folder $DATA_DIR not found" >&2
+  exit 1
+fi
+
+export DATA_DIR
+exec "$APP_DIR/venv/bin/uvicorn" app.main:create_app --factory \
+  --host "$HOST" --port "$PORT" --app-dir "$APP_DIR"
