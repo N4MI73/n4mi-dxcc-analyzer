@@ -157,6 +157,10 @@ async function load() {
     }
     state.entities = mx.entities.slice().sort((a, b) => a.name.localeCompare(b.name));
     state.cards = cards.cards;
+    // "Add paper card" on an entity report links here as /paper#<DXCC number> (D61).
+    const pick = /^#(\d{1,4})$/.exec(location.hash);
+    const pre = pick && state.entities.find((e) => e.dxcc === Number(pick[1]));
+    if (pre && !state.form.ent) state.form.ent = entKey(pre);
     renderChrome({ title: 'Paper QSL cards',
       subtitle: 'Cards you hold or have submitted that ARRL hasn\'t credited yet · never counted as credits' });
     render();

@@ -29,7 +29,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 # Page URL -> HTML file.
 PAGES = {"/": "entities.html", "/slots": "slots.html", "/matrix": "matrix.html",
          "/advisor": "advisor.html", "/paper": "paper.html", "/import": "import.html",
-         "/settings": "settings.html"}
+         "/settings": "settings.html", "/entity": "entity.html"}
 
 
 def _page_endpoint(file_path):

@@ -369,6 +369,28 @@ def _is_watched(e, dxcc, by_id, calls):
     return (dxcc, call) in calls
 
 
+def dxpeditions_for(cache, matcher, dxcc, today, window=WINDOW_DAYS):
+    """Every DXpedition in the stored list for one entity, for the entity report
+    (D61): on the air, starting within the window ("soon"), or later. Unlike
+    build(), this includes entities that are already credited, since a
+    DXpedition is a chance at their missing band and mode slots too."""
+    by_id, calls = _watched_index(cache["watched"], matcher)
+    limit = today + timedelta(days=window)
+    out = []
+    for e in cache["entries"]:
+        if matcher.place(e["name"]).dxcc != dxcc:
+            continue
+        begin, end = date.fromisoformat(e["begin"]), date.fromisoformat(e["end"])
+        if end < today:
+            continue
+        kind = "air" if begin <= today else "soon" if begin <= limit else "later"
+        out.append({"kind": kind, "callsign": e["callsign"], "begin": e["begin"],
+                    "end": e["end"], "watched": _is_watched(e, dxcc, by_id, calls)})
+    order = {"air": 0, "soon": 1, "later": 2}
+    out.sort(key=lambda x: (order[x["kind"]], x["begin"], x["callsign"]))
+    return out
+
+
 def build(cache, matcher, needed, today, window=WINDOW_DAYS):
     """Tags for the needed entities, the summary line, and the names to settle.
 

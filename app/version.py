@@ -5,4 +5,4 @@ agree (Dan, 2026-10-21: a single line in the code, not read from Git, because
 Portainer's repository build may not include the Git history).
 """
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"

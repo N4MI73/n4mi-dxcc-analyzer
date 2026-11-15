@@ -762,11 +762,19 @@ def advisor_view(request: Request, entities: int | None = None, slots: int | Non
     ctx = _context(conn)
     if ctx is None:
         return NO_DATA
+    return _advisor_result(request, conn, ctx, entities, slots, auto)
+
+
+def _advisor_result(request, conn, ctx, entities, slots, auto, whole=False):
+    """The advisor's lists and their context; shared with the entity report,
+    which asks for the whole ranking (whole=True) to find one entity's place."""
     credits, snap, profile = ctx
     st = _advisor_settings(conn)
     entities = st.entities if entities is None else entities
     slots = st.slots if slots is None else slots
-    if not (1 <= entities <= advisor.MAX_COUNT and 1 <= slots <= advisor.MAX_COUNT):
+    if whole:
+        entities = slots = len(ref(request))
+    elif not (1 <= entities <= advisor.MAX_COUNT and 1 <= slots <= advisor.MAX_COUNT):
         raise HTTPException(422, f"Ask for 1 to {advisor.MAX_COUNT} entities and band slots.")
     ranks, mw_fetched = _rankings(conn)
     # Already confirmed and waiting: awaiting marks and paper cards. Won't-submit
@@ -800,6 +808,183 @@ def advisor_view(request: Request, entities: int | None = None, slots: int | Non
                   "needed_fetched_at": cache.get("needed_fetched_at") if cache else None,
                   "needed_skipped": cache.get("needed_skipped", 0) if cache else 0,
                   "needed_error": cache.get("needed_error") if cache else None}}
+
+
+# ---------- entity search and report (D61) ----------
+
+def _slot_status(cat, have, tags):
+    """One category's state for the report: credited, or the strongest of
+    awaiting / paper card / won't submit / needed (tags lists all of them)."""
+    if cat in have:
+        return "credited"
+    m = tags["marks"].get(cat)
+    if m and m["state"] == AWAITING:
+        return "awaiting"
+    if tags["cards"].get(cat):
+        return "card"
+    if m:
+        return "wont_submit"
+    return "needed"
+
+
+@router.get("/api/entities/index")
+def entities_index(request: Request, conn=Depends(get_conn)):
+    """Every current entity, for the header search (D61). Deleted entities are
+    left out. Each entry has the names it can be found by and a one-word status,
+    worked out from the current import; the browser does the matching."""
+    reference = ref(request)
+    names = request.app.state.hamalert_names
+    aliases = {}
+    for key, d in request.app.state.adxo_builtin.items():
+        aliases.setdefault(d, []).append(key)
+    for row in db.adxo_decisions(conn):
+        if row["dxcc"]:
+            aliases.setdefault(row["dxcc"], []).append(row["adxo_name"])
+    ctx = _context(conn)
+    credits, profile = (ctx[0], ctx[2]) if ctx else (None, db.get_profile(conn))
+    tags = _Tags(conn, credits, profile) if credits is not None else None
+    shown = profile.markable_categories
+    out = []
+    for e in reference.current:
+        row = {"dxcc": e.dxcc, "prefix": e.prefix, "name": names[e.dxcc],
+               "lotw_name": e.lotw_name, "aliases": sorted(set(aliases.get(e.dxcc, ())))}
+        if credits is not None:
+            have = credits.get(e.dxcc, frozenset())
+            states = [_slot_status(c, have, tags.of(e.dxcc)) for c in shown]
+            row["new"] = MIXED not in have
+            row["needed"] = sum(1 for x in states if x in ("needed", "wont_submit"))
+            row["pending"] = sum(1 for x in states if x in ("awaiting", "card"))
+        out.append(row)
+    return {"has_data": credits is not None, "entities": out}
+
+
+@router.get("/api/entity/{dxcc}")
+def entity_report(request: Request, dxcc: int, conn=Depends(get_conn)):
+    """Everything the app knows about one current entity (D61). Reads only
+    stored data: DX Monitor is not contacted here (the page refreshes it
+    separately), so the report never waits on another app."""
+    reference = ref(request)
+    e = reference.by_dxcc.get(dxcc)
+    if e is None or e.deleted:
+        raise HTTPException(404, f"DXCC {dxcc} is not a current entity.")
+    ranks, mw_fetched = _rankings(conn)
+    names = request.app.state.hamalert_names
+    base = {"dxcc": e.dxcc, "prefix": e.prefix, "name": names[e.dxcc],
+            "lotw_name": e.lotw_name, "adif_name": e.adif_name,
+            "continent": e.continent, "cq_zone": e.cq_zone,
+            "mw_rank": ranks.get(e.dxcc), "most_wanted_fetched_at": mw_fetched}
+    ctx = _context(conn)
+    if ctx is None:
+        return base | NO_DATA
+    credits, snap, profile = ctx
+    have = credits.get(e.dxcc, frozenset())
+    tags = _Tags(conn, credits, profile).of(e.dxcc)
+
+    # When each credit first appeared: follow the chain of imports the current
+    # one was built on (each import records the import it was checked
+    # against). That is the real history of the current data: an import
+    # rolled back from is not in it, so a later import can't look like it
+    # removed that import's credits. The matrix has no QSO dates, so these
+    # are import dates, not QSO dates.
+    timeline, seen, sid = [], set(), snap["id"]
+    while sid is not None and sid not in seen:
+        s = conn.execute("SELECT id, imported_at, saved_at, based_on FROM snapshots "
+                         "WHERE id = ? AND status IN ('current', 'previous')", (sid,)).fetchone()
+        if s is None:
+            break               # an earlier import was deleted: history starts here
+        seen.add(sid)
+        timeline.append(s)
+        sid = s["based_on"]
+    timeline.reverse()
+    first_known = bool(timeline) and timeline[0]["based_on"] is None
+    ids = [s["id"] for s in timeline]
+    per = {i: set() for i in ids}
+    if ids:
+        marks = ",".join("?" * len(ids))
+        for r in conn.execute(f"SELECT snapshot_id, category FROM snapshot_credits "
+                              f"WHERE dxcc = ? AND snapshot_id IN ({marks})", [e.dxcc, *ids]):
+            per[r["snapshot_id"]].add(r["category"])
+    since, history, prev = {}, [], None
+    for s in timeline:
+        cur = per[s["id"]]
+        when = s["saved_at"] or s["imported_at"]
+        gained = [c for c in MATRIX_CATEGORIES if c in cur and (prev is None or c not in prev)]
+        lost = [] if prev is None else [c for c in MATRIX_CATEGORIES if c in prev and c not in cur]
+        for c in gained:
+            since[c] = when
+        for c in lost:
+            since.pop(c, None)
+        if gained or lost:
+            history.append({"at": when, "first": prev is None and first_known,
+                            "earliest": prev is None and not first_known,
+                            "gained": gained, "lost": lost})
+        prev = cur
+    history.reverse()
+
+    def row(c):
+        st = _slot_status(c, have, tags)
+        m = tags["marks"].get(c)
+        return {"category": c, "label": LABELS[c], "status": st,
+                "since": since.get(c) if st == "credited" else None,
+                "mark": m, "cards": tags["cards"].get(c, [])}
+
+    in_profile = list(profile.markable_categories)
+    outside = [c for c in MATRIX_CATEGORIES if c not in in_profile]
+    rows = [row(c) for c in in_profile]
+    counts = Counter(r["status"] for r in rows)
+    cards = [_card_json(cid, c, credits, profile, reference)
+             for cid, c in db.active_cards(conn) if c.dxcc == e.dxcc]
+
+    # DX Monitor, from the stored copy only (see the docstring).
+    dx = _dxmon_view(request, conn, auto=False)
+    dxm = {"enabled": dx.get("enabled", False)}
+    if dxm["enabled"]:
+        cache, _ = db.get_external(conn, "dxmon")
+        if cache and cache.get("url") != dx.get("url"):
+            cache = None
+        dxm |= {"ok": dx.get("ok"), "error": dx.get("error"), "tried_at": dx.get("tried_at"),
+                "fetched_at": dx.get("fetched_at")}
+        if cache:
+            dxm["dxpeditions"] = dxmon.dxpeditions_for(cache, _matcher(request, conn), e.dxcc,
+                                                       request.app.state.today())
+            needed = cache.get("needed")
+            dxm["needed_state"] = ("not_fetched" if "needed" not in cache else
+                                   "failed" if needed is None else
+                                   "stale" if cache.get("needed_error") else "ok")
+            dxm["needed"] = (None if needed is None else
+                             [{"bands": x["bands"], "modes": x["modes"]} for x in needed
+                              if names.place(x["name"]) == e.dxcc])
+    adv = _advisor_result(request, conn, ctx, None, None, False, whole=True)
+    suggestion = None
+    for i, x in enumerate(adv["entities"]):
+        if x["dxcc"] == e.dxcc:
+            suggestion = {"list": "entities", "rank": i + 1,
+                          "shown": i < adv["settings"]["entities"],
+                          "top": adv["settings"]["entities"]}
+    for i, x in enumerate(adv["slots"]):
+        if x["dxcc"] == e.dxcc:
+            suggestion = {"list": "slots", "rank": i + 1,
+                          "shown": i < adv["settings"]["slots"],
+                          "top": adv["settings"]["slots"],
+                          "bands": x["bands"], "modes": x["modes"], "credits": x["credits"],
+                          "dxmon_bands": x["dxmon_bands"], "dxmon_modes": x["dxmon_modes"]}
+
+    return base | {
+        "snapshot_id": snap["id"], "callsign": snap["callsign"],
+        "imported_at": snap["imported_at"], "saved_at": snap["saved_at"],
+        "profile": _profile_json(profile),
+        "new": MIXED not in have,
+        "credited": sorted(have),                 # for the mark menu
+        "marks": tags["marks"], "cards_by_slot": tags["cards"],
+        "summary": {"credited": counts["credited"], "total": len(rows),
+                    "needed": counts["needed"] + counts["wont_submit"],
+                    "awaiting": sum(1 for r in rows if r["mark"] and r["mark"]["state"] == AWAITING),
+                    "card": sum(1 for r in rows if r["cards"])},
+        "slots": rows,
+        "outside": [{"category": c, "label": LABELS[c], "credited": c in have,
+                     "since": since.get(c) if c in have else None} for c in outside],
+        "paper_cards": cards, "history": history,
+        "dxmon": dxm, "suggestion": suggestion}
 
 
 # ---------- exports (follow the profile, never a page's filters) ----------

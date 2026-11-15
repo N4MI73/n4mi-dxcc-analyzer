@@ -48,6 +48,7 @@ const HELP_SECTIONS = {
   '/': 'missing-entities', '/slots': 'missing-band-slots', '/matrix': 'full-matrix',
   '/advisor': 'suggestions-for-dx-monitor', '/paper': 'paper-qsls',
   '/import': 'getting-your-lotw-data-in-import', '/settings': 'settings',
+  '/entity': 'entity-search-and-report',
 };
 const HELP_ICON = '<b aria-hidden="true">?</b>';
 
@@ -73,7 +74,7 @@ function renderChrome({ title, subtitle, actions = '' }) {
         <h1>${esc(title)}</h1>
         <div class="sub">${subtitle || ''}</div>
       </div>
-      <div class="noprint" style="display:flex;gap:12px;align-items:center">${help}${actions}</div>
+      <div class="noprint hdr-actions">${SEARCH_HTML}${help}${actions}</div>
     </header>
     <nav class="views" aria-label="Views">
       ${PAGES.map(([href, name]) => href
@@ -83,6 +84,129 @@ function renderChrome({ title, subtitle, actions = '' }) {
     <div id="health" role="alert"></div>`;
   checkHealth();
   showDXMonExport();
+  wireSearch();
+}
+
+// ---------- Entity search in the header (D61) ----------
+// Type-ahead over every current entity (deleted ones are never listed). The
+// list is fetched once, the first time the box is used, and matched here in
+// the browser, so typing never waits on the server. Choosing an entity opens
+// its report at /entity#<DXCC number>.
+const SEARCH_HTML = `<div class="esearch" role="search">
+  <label class="sr" for="esq">Find an entity</label>
+  <div class="ebox"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+    <input id="esq" type="text" role="combobox" aria-expanded="false" aria-controls="eslist" aria-autocomplete="list"
+      placeholder="Find an entity" autocomplete="off" spellcheck="false"><kbd aria-hidden="true" title="Press / to search">/</kbd></div>
+  <ul id="eslist" class="elist" role="listbox" aria-label="Matching entities" hidden></ul></div>`;
+const SEARCH_MAX = 8;
+let searchIndex = null;      // a promise, so several keystrokes share one fetch
+
+function normText(s) {
+  return String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9/ ]+/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+function loadSearchIndex() {
+  if (!searchIndex) {
+    searchIndex = api('/api/entities/index').then((r) => {
+      for (const e of r.entities) {
+        e._px = e.prefix.toLowerCase().split(/[ ,]+/).filter(Boolean);
+        e._names = [e.name, e.lotw_name].concat(e.aliases || []).map(normText);
+      }
+      return r;
+    }).catch((err) => { searchIndex = null; throw err; });
+  }
+  return searchIndex;
+}
+
+// Best first: DXCC number, exact prefix, prefix start, name start, word starts, anywhere.
+function searchScore(e, q, words) {
+  if (/^\d+$/.test(q) && Number(q) === e.dxcc) return 100;
+  const qp = q.replace(/ /g, '');
+  if (e._px.includes(qp)) return 90;
+  if (e._px.some((p) => p.startsWith(qp))) return 80;
+  let best = 0;
+  for (const n of e._names) {
+    if (n.startsWith(q)) best = Math.max(best, 70);
+    const ws = n.split(' ');
+    if (words.every((w) => ws.some((x) => x.startsWith(w)))) best = Math.max(best, 60);
+    else if (n.includes(q)) best = Math.max(best, 40);
+  }
+  if (!best && /^\d+$/.test(q) && String(e.dxcc).startsWith(q)) best = 30;
+  return best;
+}
+
+function searchStatus(e, hasData) {
+  if (!hasData) return '';
+  if (e.new) return '<span class="st new">NEW</span>';
+  if (e.needed) return `<span class="st">${e.needed} needed</span>`;
+  if (e.pending) return '<span class="st">pending</span>';
+  return '<span class="st done">complete</span>';
+}
+
+function wireSearch() {
+  const box = document.getElementById('esq');
+  const list = document.getElementById('eslist');
+  if (!box) return;
+  let hits = [], sel = 0;
+  const close = () => { list.hidden = true; box.setAttribute('aria-expanded', 'false'); box.removeAttribute('aria-activedescendant'); };
+  const open = (e) => { location.href = `/entity#${e.dxcc}`; close(); box.value = ''; box.blur(); };
+  const draw = (idx) => {
+    if (!hits.length) {
+      list.innerHTML = '<li class="hint" role="presentation">No current entity matches. Try a prefix, a name or a DXCC number.</li>';
+    } else {
+      list.innerHTML = hits.map((e, i) => `<li id="es-${i}" role="option" aria-selected="${i === sel}"${i === sel ? ' class="sel"' : ''} data-i="${i}">
+        <span class="px">${esc(e.prefix || '—')}</span><span class="nm">${esc(e.name)}</span>${searchStatus(e, idx.has_data)}</li>`).join('')
+        + '<li class="hint" role="presentation">↑ ↓ to move · Enter to open · name, prefix or DXCC number</li>';
+      box.setAttribute('aria-activedescendant', `es-${sel}`);
+    }
+    list.hidden = false;
+    box.setAttribute('aria-expanded', 'true');
+  };
+  const update = async () => {
+    const q = normText(box.value);
+    if (!q) { close(); return; }
+    let idx;
+    try { idx = await loadSearchIndex(); } catch (err) {
+      list.innerHTML = `<li class="hint" role="presentation">Search isn't available: ${esc(err.message)}</li>`;
+      list.hidden = false; return;
+    }
+    // A newer keystroke has taken over, or the box was closed while waiting.
+    if (normText(box.value) !== q || document.activeElement !== box) return;
+    const words = q.split(' ');
+    hits = idx.entities.map((e) => [searchScore(e, q, words), e]).filter(([s]) => s > 0)
+      .sort((a, b) => b[0] - a[0] || a[1].name.localeCompare(b[1].name)).slice(0, SEARCH_MAX).map(([, e]) => e);
+    sel = 0;
+    draw(idx);
+  };
+  box.addEventListener('focus', () => { loadSearchIndex().catch(() => {}); });
+  box.addEventListener('input', update);
+  box.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') { close(); box.blur(); return; }
+    if (list.hidden || !hits.length) return;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      sel = (sel + (ev.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length;
+      loadSearchIndex().then(draw);
+    } else if (ev.key === 'Enter') { ev.preventDefault(); open(hits[sel]); }
+  });
+  // mousedown, not click: it fires before the box loses focus.
+  list.addEventListener('mousedown', (ev) => {
+    const li = ev.target.closest('li[data-i]');
+    if (li) { ev.preventDefault(); open(hits[+li.dataset.i]); }
+  });
+  box.addEventListener('blur', () => setTimeout(close, 150));
+  if (!window.__searchKey) {
+    window.__searchKey = true;
+    document.addEventListener('keydown', (ev) => {
+      const t = ev.target;
+      const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+      if (ev.key === '/' && !typing && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        const b = document.getElementById('esq');
+        if (b) { ev.preventDefault(); b.focus(); }
+      }
+    });
+  }
 }
 
 // The For DX Monitor export appears only while DX Monitor is switched on in

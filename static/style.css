@@ -305,3 +305,57 @@ article.doc .callout .t { font: 600 13px var(--mono); letter-spacing: .08em; col
   article.doc .callout { background: none; border-color: #999; } article.doc .callout .t { color: #000; }
   .brand .ver { color: #555; }
 }
+
+/* header actions, entity search (D61) */
+.hdr-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.esearch { position: relative; }
+.ebox { display: flex; align-items: center; gap: 8px; width: 260px; min-height: 44px; padding: 0 10px 0 12px; background: var(--bg);
+  border: 1px solid var(--line2); border-radius: 8px; }
+.ebox:focus-within { border-color: var(--amber); }
+.ebox svg { width: 16px; height: 16px; fill: none; stroke: var(--muted); stroke-width: 2; flex: 0 0 auto; }
+.ebox input { flex: 1; min-width: 0; background: none; border: 0; color: var(--text); font: 15px var(--sans); outline: none; }
+.ebox input::placeholder { color: var(--muted); }
+.ebox kbd { font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; }
+.elist { position: absolute; left: 0; top: calc(100% + 6px); width: 380px; max-width: calc(100vw - 32px); margin: 0; padding: 6px; list-style: none;
+  background: var(--panel); border: 1px solid var(--line2); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, .5); z-index: 20; }
+.elist li { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 6px; cursor: pointer; }
+.elist li.sel, .elist li[role=option]:hover { background: var(--amber-bg); }
+.elist .px { font: 600 13px var(--mono); color: var(--amber); overflow-wrap: anywhere; }
+.elist .nm { font-size: 14px; color: var(--text); }
+.elist .st { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+.elist .st.new { color: var(--soft); border: 1px solid var(--soft); border-radius: 999px; padding: 0 6px; font-weight: 600; }
+.elist .st.done { color: var(--green-text); }
+.elist li.hint { display: block; cursor: default; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 4px; padding-top: 8px; }
+.elist li.hint:first-child { border-top: 0; margin-top: 0; }
+
+/* entity report (D61) */
+.amber { color: var(--amber); }
+.rep-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.side { display: flex; flex-direction: column; gap: 20px; }
+table.st { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+table.st th { text-align: left; font: 600 12px var(--mono); color: var(--muted); letter-spacing: .06em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+table.st td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.st tr.grp td { font: 600 11px var(--mono); letter-spacing: .1em; color: var(--muted); padding-top: 14px; border-bottom: 0; }
+table.st tr.quiet td { color: var(--muted); }
+table.st tr.sub td { padding-top: 0; }
+.stc { display: inline-flex; gap: 8px; align-items: center; }
+button.cell:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+dl.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 16px; margin: 12px 0 0; align-items: center; font-size: 14px; }
+dl.kv dt { color: var(--muted); font-size: 13px; }
+dl.kv dd { margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+dl.kv dd.stack { flex-direction: column; align-items: flex-start; gap: 6px; }
+ul.hist { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+ul.hist .mono { color: var(--amber); margin-right: 10px; }
+@media (max-width: 900px) {
+  .rep-grid { grid-template-columns: 1fr; }
+  .hdr-actions { justify-content: flex-start; width: 100%; }
+  .esearch, .ebox { width: 100%; }
+  .elist { width: 100%; max-width: none; }
+}
+@media print {
+  .rep-grid, .side { display: block; } .side > * { margin-top: 12px; }
+  table.st td, table.st th { color: #000; border-bottom-color: #ccc; } table.st tr { break-inside: avoid; }
+  ul.hist .mono, .amber { color: #000; } dl.kv dt { color: #444; }
+  button.cell { border-color: #000; }
+}

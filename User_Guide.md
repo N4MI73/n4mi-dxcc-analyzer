@@ -15,6 +15,7 @@ In the app, this guide is the **Help** page. The **Help** link at the top of eve
 - [Missing Entities](#missing-entities)
 - [Missing Band Slots](#missing-band-slots)
 - [Full Matrix](#full-matrix)
+- [Entity search and report](#entity-search-and-report)
 - [Marking confirmations that aren't credited yet](#marking-confirmations-that-arent-credited-yet)
 - [Paper QSLs](#paper-qsls)
 - [Suggestions for DX Monitor](#suggestions-for-dx-monitor)
@@ -145,6 +146,28 @@ Every entity with a gap in your profile, one column per band and mode:
 - **Select a needed cell** to open the mark menu for that entity.
 
 Filters on this page only change what you see. Your operating profile still decides what counts as needed.
+
+## Entity search and report
+
+To see everything about one entity in one place, use the **Find an entity** box at the top of every page. Press **/** to jump to it from anywhere.
+
+- Type part of a name ("falk"), a prefix ("VP8") or a DXCC number ("141"). HamAlert and DXpedition spellings work too. Deleted entities are never listed.
+- Each match shows its status at a glance: **NEW** (never confirmed), how many slots in your profile are still needed, **pending** (only awaiting credit or paper cards), or **complete**.
+- Use the arrow keys and **Enter**, or click, to open the entity's report.
+
+![The search box with the matches for "vp8".](images/entity_search.png)
+
+The report shows:
+
+- **A summary:** slots credited out of your profile, still needed, awaiting credit, and covered by a paper card.
+- **Status in your profile:** every category with its state. A credited one shows the first import that showed the credit. That is the date the credit reached the analyzer, not the QSO date, because LoTW's matrix has no QSO dates. Awaiting and won't-submit marks show their notes. Categories outside your profile are listed underneath.
+- **Names:** HamAlert's spelling with a **Copy** button (the one to type into DX Monitor), plus the LoTW name.
+- **DX Monitor** (when it's connected): any DXpedition on the air or coming up and whether you watch it, any Needed entry for the entity, and its place in **Suggestions**. Without DX Monitor, this panel shows only the Suggestions line.
+- **Paper cards** for the entity, and a **credit history** of which import added which credits.
+
+From the report you can act straight away: **Mark slots…** opens the same mark menu as the list pages (or click any slot that isn't credited), and **Add paper card** opens the Paper QSLs form with the entity filled in.
+
+![An entity report: summary, status in the profile, names, DX Monitor, paper cards and history.](images/entity_report.png)
 
 ## Marking confirmations that aren't credited yet
 
@@ -327,3 +350,4 @@ For each suggestion you want to chase:
 | A DX Monitor Needed entry never gets a hit | Check its spelling against the HamAlert name in Suggestions, and that a matching HamAlert trigger exists |
 | Every page shows a "Problem" banner | The database or the data folder isn't readable; see the README's deployment section |
 | Which version am I running? | It's beside the app's name at the top of every page |
+| How do I see everything about one entity? | Type its name, prefix or DXCC number in **Find an entity** at the top of any page |
