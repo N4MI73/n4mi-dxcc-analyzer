@@ -312,7 +312,7 @@ For each suggestion you want to chase:
 
 - **A different spelling never matches.** LoTW's "U K BASES ON CYPRUS" won't match HamAlert's "UK Sovereign Base Areas on Cyprus", so an entry spelled that way never shows a hit.
 - **Where the analyzer's names come from:** HamAlert takes its entity data from Club Log, which uses the standard ADIF names, and the analyzer shows exactly those.
-- **Two exceptions:** HamAlert still lists two renamed entities under their old names, **Swaziland** (Eswatini) and **Macedonia** (North Macedonia). The analyzer knows about both.
+- **Five exceptions, all handled by the analyzer:** HamAlert still lists two renamed entities under their old names, **Swaziland** (Eswatini) and **Macedonia** (North Macedonia), and spells three its own way: **Rodriguez I.**, **South Africa** and **St Maarten** (no full stop). Every name was checked against HamAlert's picker in November 2026.
 
 **Why "2 credits" comes first:** a band-slot suggestion such as "40m, 12m with CW" means every spot DX Monitor alerts on is a contact worth two credits, one band plus one mode. A suggestion with only bands (any mode) or only modes (any band) is worth one.
 

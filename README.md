@@ -14,7 +14,7 @@ It runs LAN-only on a home NAS (FastAPI + SQLite + vanilla HTML/CSS/JS in Docker
 
 ## Status
 
-**v1.0 released 2026-10-13; current release v1.4.0.** Deployed on the UGreen NAS (Docker, Portainer, port 8086). Since v1.0: DXpedition tags from DX Monitor, the Suggestions page for DX Monitor's Needed list, the user guide, the security review fixes, the in-app Help page, and entity search with a full report for each entity. The version running is shown beside the app's name on every page. What's in the repository:
+**v1.0 released 2026-10-13; current release v1.4.1.** Deployed on the UGreen NAS (Docker, Portainer, port 8086). Since v1.0: DXpedition tags from DX Monitor, the Suggestions page for DX Monitor's Needed list, the user guide, the security review fixes, the in-app Help page, and entity search with a full report for each entity. The version running is shown beside the app's name on every page. What's in the repository:
 
 | File | What it does |
 |---|---|

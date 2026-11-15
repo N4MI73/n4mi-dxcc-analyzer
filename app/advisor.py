@@ -27,10 +27,12 @@ Band slots (entities already credited for Mixed), one suggestion per entity:
 
 Names are HamAlert's spellings, because DX Monitor matches spots by HamAlert's
 entity name (trimmed and lower-cased, nothing else). HamAlert uses Club Log's
-DXCC data, whose names are the ADIF names in our reference table; Dan checked
-all 63 of his needed entities plus 15 unusual or renamed ones in HamAlert's
-picker (2026-10-20). Two differ — HamAlert keeps the old names — and are listed
-in data/hamalert_overrides.csv.
+DXCC data, whose names are the ADIF names in our reference table. Dan checked
+78 names in HamAlert's picker on 2026-10-20 and the whole picker (all 340
+current entities) on 2026-11-15. Five differ from ADIF and are listed in
+data/hamalert_overrides.csv: two old names HamAlert keeps (Swaziland,
+Macedonia) and three spellings of its own (Rodriguez I., South Africa,
+St Maarten).
 
 Modes in DX Monitor's terms: Phone = ssb, Digital = ft8 + ft4 (DX Monitor
 offers cw, ssb, ft4 and ft8, the four HamAlert trigger modes).

@@ -1,8 +1,9 @@
 """Curation advisor (D55): HamAlert names, ranking, DX Monitor's Needed list, API.
 
-tests/data/hamalert_names_checked.csv holds entity names as HamAlert's picker
-shows them, checked by Dan on 2026-10-20 (his 63 needed entities plus 15
-unusual or renamed ones). They are public entity names, not his data.
+tests/data/hamalert_names_checked.csv holds every current entity's name as
+HamAlert's picker shows it, transcribed from Dan's screenshots of the whole
+picker on 2026-11-15 (an earlier check on 2026-10-20 covered 78). They are
+public entity names, not his data.
 Everything else here is synthetic.
 """
 
@@ -33,13 +34,15 @@ def names(reference):
 
 def test_every_checked_name_matches_hamalert_exactly(names):
     rows = list(csv.DictReader(open(CHECKED, encoding="utf-8")))
-    assert len(rows) == 78
+    assert len(rows) == 340
     for r in rows:
         assert names[int(r["dxcc"])] == r["hamalert_name"], r
 
 
 def test_overrides_are_the_renamed_entities(reference):
-    assert advisor.load_overrides(reference) == {468: "Swaziland", 502: "Macedonia"}
+    assert advisor.load_overrides(reference) == {
+        207: "Rodriguez I.", 462: "South Africa", 468: "Swaziland", 502: "Macedonia",
+        518: "St Maarten"}
 
 
 def test_bad_override_row_stops_start_up(reference, tmp_path):
